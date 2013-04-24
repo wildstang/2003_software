@@ -1,0 +1,1016 @@
+' {$PBASIC 2.5}
+' {$STAMP BS2sx}
+
+
+
+'=============================================================================================================
+'========== CONDITIONAL COMPILATION ==========================================================================
+'=============================================================================================================
+' To prevent code from being compiled simply comment out the #DEFINE line
+#DEFINE ACCELERATION_CODE
+
+' Comment out line to use pot & joystick values for proto robot
+#DEFINE COMPETITION_ROBOT
+
+' Comment out to display waypoint data on user display or to use the LEDs.
+' Uncomment to send streaming data back to the PalmPilot connected to the OI.
+#DEFINE DISPLAY_DATA_ON_PALM
+
+'=============================================================================================================
+'========== DECLARE VARIABLES ================================================================================
+'=============================================================================================================
+'  Below is a list of declared input and output variables.  Comment or un-comment
+'  the variables as needed.  Declare any additional variables required in
+'  your main program loop.  Note that you may only use 26 total variables.
+
+'---------- Misc. MUST BE THE FIRST VARIABLES IN ALL BANKS ---------------------------------------------------
+'------PERSISTENT VARIABLES -- VALID IN ALL BANKS ------------------------------------------------------------
+'NOTE:In order for these variables to be valid in ALL banks, they must be in the exact same spot in each bank.
+'     To do this, just always keep these as the first variables in each bank.
+'packet_num               VAR byte
+'delta_t                  VAR byte
+
+'---------- Aliases for the Pbasic Mode Byte (nvr_PB_mode) -------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Bit 7 of the nvr_PB_mode byte (aliased as comp_mode below) indicates the status
+'  of the Competition Control, either Enabled or Disabled.  This indicates the
+'  starting and stopping of rounds at the competitions.
+'  Comp_mode is indicated by a solid "Disabled" LED on the Operator Interface.
+'  Comp_mode = 1 for Enabled, 0 for Disabled.
+'
+'  Bit 6 of the nvr_PB_mode byte (aliased as auton_mode below) indicates the status
+'  of the Autonomous Mode, either Autonomous or Normal.  This indicates when
+'  the robot must run on its own programming.  When in Autonomous Mode, all
+'  OI analog inputs are set to 127 and all OI switch inputs are set to 0 (zero).
+'  Auton_mode is indicated by a blinking "Disabled" LED on the Operator Interface.
+'  Auton_mode = 1 for Autonomous, 0 for Normal.
+'
+'  Autonomous Mode can be turned ON by setting the RC to Team 0 (zero).
+
+'
+'  Bit 5 of the nvr_PB_mode byte (aliased as user_display_mode below) indicates when
+'  the user selects the "User Mode" on the OI.  nvr_PB_mode.bit5 is set to 1 in "User Mode".
+'  When the user selects channel, team number, or voltage, nvr_PB_mode.bit5 is set to 0
+'  When in "User Mode", the eight Robot Feedback LED are turned OFF.
+'  Note: "User Mode" is identified by the letter u in the left digit (for 4 digit OI's)
+'  Note: "User Mode" is identified by decimal places on the right two digits (for 3 digit OI's)
+nvr_PB_mode                    VAR byte
+nvr_PB_mode__comp_mode         VAR nvr_PB_mode.bit7
+nvr_PB_mode__auton_mode        VAR nvr_PB_mode.bit6
+nvr_PB_mode__user_display_mode VAR nvr_PB_mode.bit5 
+
+nvr_manybits                   VAR byte
+nvr_manybits__twitchdone       VAR nvr_manybits.bit0
+nvr_manybits__crab_broken      VAR nvr_manybits.bit1
+nvr_manybits__first_loop       VAR nvr_manybits.bit2
+nvr_manybits__first_auto_loop  VAR nvr_manybits.bit3
+nvr_manybits__prev_loop_ctr    VAR nvr_manybits.bit4
+nvr_manybits__prev_loop_dir    VAR nvr_manybits.bit5
+nvr_manybits__fwing_brake      VAR nvr_manybits.bit6
+nvr_manybits__bwing_brake      VAR nvr_manybits.bit7
+
+'THIS MUST MATCH WITH robot2/3/4 ALSO
+waypoint            VAR byte
+waypoint__side      VAR waypoint.BIT7     'Top bit indicates side of the field
+waypoint__prog_side VAR waypoint.HIGHNIB  'Program number combined with side is the program to run
+waypoint__idx       VAR waypoint.LOWNIB   'Bottom 4 bits are the current waypoint index we are at
+WAYPOINT_PROG_ONLY_MASK CON %0111   'ANDing prog_side with this will return prog only (mask off "side"...bit7)
+
+'---------- Operator Interface (OI) - Analog Inputs ----------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+p1_x		VAR byte	'Port 1, X-axis on Joystick
+
+drive_x		VAR byte	'Drive stick X-axis
+
+p3_x		VAR byte	'Port 3, X-axis on Joystick
+
+crab_x		VAR byte	'Crab stick X-axis
+
+p1_y		VAR byte	'Port 1, Y-axis on Joystick
+
+drive_y		VAR byte	'Drive stkci Y-axis
+
+'p3_y		VAR byte	'Port 3, Y-axis on Joystick
+
+crab_y		VAR byte	'Crab stick Y-axis
+
+p1_wheel	VAR byte	'Port 1, Wheel on Joystick
+
+'p2_wheel	VAR byte	'Port 2, Wheel on Joystick
+
+'p3_wheel	VAR byte	'Port 3, Wheel on Joystick
+
+'p4_wheel	VAR byte	'Port 4, Wheel on Joystick
+
+'p1_aux		VAR byte	'Port 1, Aux on Joystick
+
+'p2_aux		VAR byte	'Port 2, Aux on Joystick
+
+'p3_aux		VAR byte	'Port 3, Aux on Joystick
+
+
+'p4_aux		VAR byte	'Port 4, Aux on Joystick
+
+
+
+
+'---------- Operator Interface - Digital Inputs --------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+oi_swA		VAR byte	'OI Digital Switch Inputs 1 thru 8
+oi_swB		VAR byte	'OI Digital Switch Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Inputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+rc_swA		VAR byte	'RC Digital Inputs 1 thru 8
+'rc_swB		VAR byte	'RC Digital Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Outputs ---------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+relayA		VAR byte
+relayB		VAR byte
+
+'---------- Temporary Variables ------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+tmp1		VAR byte
+tmp2		VAR byte
+tmp3		VAR byte
+tmp4		VAR byte
+tmp5		VAR byte
+tmp6		VAR byte
+tmp7		VAR byte
+tmp8		VAR byte
+tank_steer_mode VAR bit
+
+'Keep track of the the user_mode bit (RC request to see user data instead of LEDs) 
+tmp2_manybits2__force_auto     VAR tmp2.bit0    'User requested robot to run auto regardless of auton bit from OI 
+tmp2_manybits2__prev_user_mode VAR tmp2.bit1    'Previous loop value of the PBMode.user_mode
+tmp2_manybits2__many2          VAR tmp2.bit2
+tmp2_manybits2__many3          VAR tmp2.bit3
+tmp2_manybits2__loop_cnt       VAR tmp2.HIGHNIB 'Keep loop count...incrememnted each loop
+
+
+'=============================================================================================================
+'========== DEFINE ALIASES ===================================================================================
+'=============================================================================================================
+'  Aliases are variables which are sub-divisions of variables defined
+'  above.  Aliases don't require any additional RAM.
+
+
+'---------- Aliases for each OI switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Operator Interface.
+'  Ports 1 & 3 have their inputs duplicated in ports 4 & 2 respectively.  The 
+'  inputs from ports 1 & 3 may be disabled via the 'Disable' dip switch 
+'  located on the Operator Interface.  See Users Manual for details.
+
+fwing_up_sw	VAR oi_swA.bit0	'p1_sw_trig
+fwing_dn_sw	VAR oi_swA.bit1	'p1_sw_top
+bwing_up_sw	VAR oi_swA.bit2	'p1_sw_aux1
+bwing_dn_sw	VAR oi_swA.bit3	'p1_sw_aux2
+
+stacker_up_sw	VAR oi_swA.bit4	'p3_sw_trig
+stacker_dn_sw	VAR oi_swA.bit5	'p3_sw_top
+scraper_sw	VAR oi_swA.bit6	'p3_sw_aux1
+crab_ovr_sw	VAR oi_swA.bit7	'p3_sw_aux2
+
+p2_sw_trig	VAR oi_swB.bit0	'p2_sw_trig
+p2_sw_top	VAR oi_swB.bit1	'p2_sw_top
+p2_sw_aux1	VAR oi_swB.bit2	'p2_sw_aux1
+p2_sw_aux2	VAR oi_swB.bit3	'p2_sw_aux2
+
+crab_trig	VAR oi_swB.bit4	'p4_sw_trig
+crab_top	VAR oi_swB.bit5	'p4_sw_top
+drive_trig	VAR oi_swB.bit6	'p4_sw_aux1
+drive_top	VAR oi_swB.bit7	'p4_sw_aux2
+
+
+'---------- Aliases for each RC switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Robot Controller.
+
+rc_sw1		VAR rc_swA.bit0
+rc_sw2		VAR rc_swA.bit1
+rc_sw3		VAR rc_swA.bit2
+rc_sw4		VAR rc_swA.bit3
+rc_sw5		VAR rc_swA.bit4
+rc_sw6		VAR rc_swA.bit5
+rc_sw7		VAR rc_swA.bit6
+rc_sw8		VAR rc_swA.bit7
+
+'---------- Aliases for each RC Relay outputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the relay outputs located on the Robot Controller.
+
+relay1_fwd	VAR relayA.bit0
+relay1_rev	VAR relayA.bit1
+relay2_fwd	VAR relayA.bit2
+relay2_rev	VAR relayA.bit3
+relay3_fwd	VAR relayA.bit4
+relay3_rev	VAR relayA.bit5
+relay4_fwd	VAR relayA.bit6
+relay4_rev	VAR relayA.bit7
+
+relay5_fwd	VAR relayB.bit0
+relay5_rev	VAR relayB.bit1
+relay6_fwd	VAR relayB.bit2
+relay6_rev	VAR relayB.bit3
+relay7_fwd	VAR relayB.bit4
+relay7_rev	VAR relayB.bit5
+relay8_fwd	VAR relayB.bit6
+relay8_rev	VAR relayB.bit7
+
+'=============================================================================
+'SHARED Constants (these are used by more than one bank and MUST AGREE in each) 
+TRUE		CON 1
+FALSE		CON 0
+
+'=============================================================================
+'Constants for Scratchpad ram locations [0-62] (63 reserved)
+'(these constants are shared and must agree in all banks) 
+
+'(I just reserved these in the order they come in the serin stream)
+
+s_oi_swA	CON	0
+s_oi_swB	CON	1
+s_rc_swA	CON	2
+s_drive_x       CON     3
+s_drive_y       CON     4
+s_crab_x        CON     5
+s_crab_y        CON     6
+s_fwing_oi      CON     7
+s_bwing_oi      CON     8
+s_stacker_oi    CON     9
+'s_PB_mode	CON	10
+'s_packet_num 	CON	11
+s_lcrab_pot	CON	12	'left crab pot
+s_rcrab_pot	CON	13	'right crab pot
+
+s_fwing_pot	CON	15	'front wing pot
+s_bwing_pot	CON	16	'back wing pot
+
+'s_p3_y		CON	17
+s_stacker_pot	CON	18	'stacker pot
+'s_sensor6	CON	19
+'s_p2_wheel	CON	20
+'s_p1_wheel	CON	21
+'s_sensor7	CON	22
+'(...end of possible serin inputs.  continue now, with outputs and stored user variables.) 
+
+s_stacker_tgt   CON     25
+
+'s_waypoint_sel  CON     26
+'s_waypoint_flgs CON     27
+
+s_curr_pos_x	CON	32
+s_curr_pos_y	CON	33
+s_curr_orient	CON	34   'current compass value (or theta) of the robot
+s_target_orient CON     35   'target compass value of the robot
+
+s_fwing_wp_tgt  CON     36
+s_bwing_wp_tgt  CON     37
+
+s_waypoint 	CON	38
+s_target_heading CON	39
+
+s_relayA	CON	40
+s_relayB	CON	41
+
+s_fwing_tgt	CON	42
+s_bwing_tgt	CON	43
+
+s_rcrab_target	CON	44
+s_lcrab_target	CON	45
+s_right_crab	CON	46  'crab steering motor speed
+s_left_crab	CON	47
+s_rcrab_init	CON	48
+s_lcrab_init	CON	49
+
+s_lf_cur	CON	50  'current speed of drive wheels
+s_rf_cur	CON	51
+s_lb_cur	CON	52
+s_rb_cur	CON	53
+
+s_lf_wheel	CON	54  'stored value for left_wheel 
+s_rf_wheel	CON	55
+s_lb_wheel	CON	56
+s_rb_wheel	CON	57
+
+s_front_wing	CON	58  'current speed of wings
+s_back_wing	CON	59
+s_stacker       CON     60  'current speed of stacker
+
+
+s_manybits2	CON	10  'additional status bits
+
+s_bat_volt	CON	62
+s_banknumber	CON	63  'Read-Only
+
+' ...insert any other storage names up to 62 that are useful... 
+
+
+
+'      ____ ___  _   _ ____ _____  _    _   _ _____ ____
+'     / ___/ _ \| \ | / ___|_   _|/ \  | \ | |_   _/ ___|
+'    | |  | | | |  \| \___ \ | | / _ \ |  \| | | | \___ \
+'    | |__| |_| | |\  |___) || |/ ___ \| |\  | | |  ___) |
+'     \____\___/|_| \_|____/ |_/_/   \_\_| \_| |_| |____/
+'
+'Bank Constants (only used in this bank)
+ANALOG_TO_BUTTON_HIGH      CON  200 'threshold for analog buttons
+DRIVE_DEADZONE             CON  5
+DRIVE_ACCEL_RATE           CON  35
+DRIVE_SCL_50               CON  50  'turbo drive speed reduction (percent) [e.g. 50]
+DRIVE_CON_50               CON  64  '128 * (1- reduction percent) [e.g. 64]
+
+ONE_TWO_AXIS_CRAB_DIVIDER  CON  110  'When the crab joystick is above this number, one-axis crab is used
+                                     ' if below this point then two-axis is used.
+
+ONE_AXIS_DEADZONE          CON  10
+TWO_AXIS_DEADZONE          CON  50
+CRAB_MODE_DEADZONE         CON  20
+'45_DEGREE_DEADZONE         CON  10
+
+CRAB_MANU_SPEED            CON  50
+
+'DRIVE_STICK_CENTER         CON  127
+'CRAB_NINETY_DEGREE         CON  64
+
+STICK_LEFT_SIDE            CON  191         'The value in brads when the joystick is on the left side
+STICK_RIGHT_SIDE           CON  64          'The value in brads when the joystick is on the right side
+TWO_AXIS_CENTER            CON  1
+TWO_AXIS_NOT_CENTER        CON  0 
+TWO_AXIS_RIGHT             CON  0
+TWO_AXIS_LEFT              CON  1
+
+#IF COMPETITION_ROBOT #THEN
+'=================Competition Robot=========
+JOYSTICK_MAX_VALUE         CON  252         'Max value read from the joystick
+JOYSTICK_MIN_VALUE         CON  11          'Min value read from the joystick
+#ELSE
+'=================Proto Robot===============
+JOYSTICK_MAX_VALUE         CON  252         'Max value read from the joystick
+JOYSTICK_MIN_VALUE         CON  11          'Min value read from the joystick
+#ENDIF
+
+
+JOYSTICK_TRAVEL_LOW        CON  127-JOYSTICK_MIN_VALUE  'Joysticks travel tword 255
+JOYSTICK_TRAVEL_HI         CON  JOYSTICK_MAX_VALUE-127  'Joysticks travel tword 0
+
+MAX_CRAB_TARG_DIFF         CON 10  'Max value in brads that the two crab modules can be off from each other
+                                   '  to create a theta/orient change.
+
+'NOTE: CC MUST be the bitwise NOT of CW for the code to work
+CC_ROTATION_NEEDED         CON 1   'CounterClockwise rotation is needed to get to target theta
+CW_ROTATION_NEEDED         CON 0   'Clockwise rotation is needed to get to target theta
+ORIENT_ADJUST_DEAD_ZONE    CON 2   'If we are w/in this many brads (plus or minus) of our theta/orientation 
+                                   ' targ then no adjustment
+'---- Starting points for robot
+'WARNING...MUST CHANGE THIS DEFINE IN robot2/3/4 ALSO
+WAYPOINT_RIGHT_SIDE     CON  0     'must be a bit, changing this effects AUTO_LIST_XXX_ADD below
+WAYPOINT_LEFT_SIDE      CON  1
+
+PALM_CMD_POS       CON 85   'Command byte sent to the Palm to indicate begining of position data 
+PALM_CMD_WAYPOINT  CON 130  'Command byte sent to the Palm to indicate begining of current waypoint
+
+'=============================================================================================================
+'========== MAIN CODE ========================================================================================
+'=============================================================================================================
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+
+Gosub PotTests
+
+if nvr_PB_mode__auton_mode = 1 then
+   'do Autonomous stuff
+else
+   '---- Theta Correction
+   Gosub ThetaCorrectionCheck   
+   '----- Drive
+   Gosub DriveStickInput
+
+   '----- Crab
+   'Manual override check
+   GET s_oi_swA, oi_swA
+   if ((nvr_manybits__crab_broken = 1) or (crab_ovr_sw = 1)) then
+   Gosub CrabManuOverride
+   else
+      Gosub CrabStickInput
+   endif
+
+endif
+
+Gosub DisplayUserData
+
+Run 5
+
+'=========================================
+'========= PotTests Subroutine ===========
+'== Inputs:  s_lcrab_pot - left pot value
+'==          s_rcrab_pot - right pot value
+'==          nvr_manybits (nvr_manybits__crab_broken) - health of pots
+'== Outputs: nvr_manybits (nvr_manybits__crab_broken) - health of pots
+'== Modifys: tmp1, tmp2, nvr_manybits
+'== Purpose: Check if pots are (obviously) broken
+'=========================================
+PotTests:
+
+GET s_lcrab_pot, tmp1
+GET s_rcrab_pot, tmp2
+
+if ((tmp1 = 0) or (tmp2 = 0) or (tmp1 >= 254) or (tmp2 >= 254)) then
+   'GET s_manybits, manybits  'manybits is now a persistent ram variable across banks
+   nvr_manybits__crab_broken = 1
+   'PUT s_manybits, manybits  'manybits is now a persistent ram variable across banks
+endif
+
+return 'from PotTests
+
+'=========================================
+'========= DisplayUserData Subroutine ===========
+'== Inputs:  s_waypoint      - encoding of side, prog and index
+'== Outputs: out8-15...LEDs or UserDataDisplay
+'== Modifys: tmp1
+'== Purpose: Display interesting info to the player station
+'=========================================
+DisplayUserData:
+
+GET s_waypoint, waypoint
+'debug " Index", dec waypoint__idx, " ProgSide=0x", hex waypoint__prog_side 
+'debug " comp=", dec nvr_PB_mode__comp_mode, CR
+
+'If enabled then output the waypoint number only
+if(nvr_PB_mode__comp_mode = 0) then
+   'To display data on the Palm we need to be aware of what loop we are in.
+   '  Loop0=PositionCommandByte
+   '  Loop1=X Position
+   '  Loop2=Y Position
+   '  Loop3=Theta
+   '  Loop4=WaypointCommandByte
+   '  Loop5=WaypointData
+   '  MAX value come from LOOP_COUNT_MAX in robot2.bsx
+
+   GET s_manybits2, tmp2
+   'debug ?tmp2_manybits2__loop_cnt
+   select (tmp2_manybits2__loop_cnt)
+      case (0)
+         tmp2 = PALM_CMD_POS 
+      case (1)
+         GET s_curr_pos_x, tmp2
+      case (2)
+         GET s_curr_pos_y, tmp2
+      case (3)
+         GET s_curr_orient, tmp2
+      case (4)
+         tmp2 = PALM_CMD_WAYPOINT 
+      case (5)
+         GET s_waypoint, tmp2 
+      case else
+         tmp2 = 0
+   endselect
+
+   'send current info to Palm connected to OI
+   Out8 = tmp2.bit0
+   Out9 = tmp2.bit1
+   Out10 = tmp2.bit2
+   Out11 = tmp2.bit3
+   Out12 = tmp2.bit4
+   Out13 = tmp2.bit5
+   Out14 = tmp2.bit6
+   Out15 = tmp2.bit7
+
+else
+   'When not enabled, display the auton info 
+   'INFO ENCODED IN USER BIT...Currently only 9 programs work nicely with this scheme:
+   'UserByte = (Left * 100) (prog# * 10) + (current waypoint index) + (9 if forced auto)
+   'So, 120 = Left Prog2 Index0
+   '    155 = Left Prog5 Index5
+   '    023 = Right Prog2 Index3
+   '    029 = Right Prog2 Index9 or Right Prog2 Index0 Forced Auto
+   
+   'Set tmp1 to 10*program...so 10=prog 1, 20=prog2, 30=prog3, etc
+   tmp1 = (waypoint__prog_side & WAYPOINT_PROG_ONLY_MASK)*10  'Set tmp1 to the program*10 (without the side)
+  
+   'Now, if we are working on the left side add 100
+   if(waypoint__side = WAYPOINT_LEFT_SIDE) then
+     tmp1 = tmp1 + 100
+   endif
+ 
+   'Now add the waypoint index we are currently at
+   tmp1 = tmp1 + waypoint__idx
+ 
+   GET s_manybits2, tmp2
+   if (tmp2_manybits2__force_auto = 1) then
+     tmp1 = tmp1 + 9                         'increment waypoint_idx by 9 when in forced auto
+   endif
+ 
+   'display current waypoint info on OI
+   Out8 = tmp1.bit0
+   Out9 = tmp1.bit1
+   Out10 = tmp1.bit2
+   Out11 = tmp1.bit3
+   Out12 = tmp1.bit4
+   Out13 = tmp1.bit5
+   Out14 = tmp1.bit6
+   Out15 = tmp1.bit7
+endif
+
+return 'from DisplayUserData
+
+'=========================================
+'========= ThetaCorrectionCheck Subroutine ===========
+'== Inputs:  crab_trig       - crab joystick trigger value
+'==          s_curr_orient   - current orientation of the robot
+'== Outputs: s_target_orient - target orientation 
+'== Modifys: tmp1
+'== Purpose: If the theta lock button is not pressed, then make the target=current to
+'==          turn off theta correction.
+'=========================================
+ThetaCorrectionCheck:
+
+'When not in autonomous mode we can turn on theta correction using the crab trigger
+ GET s_oi_swB, oi_swB       'Get crab trig data  
+if(crab_trig = 0) then
+   'When not in autonomous mode and not in auto theta hold then we want to turn off orientation 
+   ' adjustment by setting target=current
+   'NOTE:The first loop where the trig is pulled will cause us to track to the theta of the prev loop
+   GET s_curr_orient, tmp1
+   PUT s_target_orient, tmp1  'Default target theta to current theta
+endif
+
+return 'from Theta Correction
+
+'================================================
+'========= DriveStickInput Subroutine ===========
+'== Inputs:  s_drive_y
+'==          s_drive_x
+'==          s_crab_x
+'==          s_crab_y
+'== Outputs: s_<all>_wheel
+'==          s_<all>_cur
+'== Modifys: crab_x, crab_y, tmp1, tmp2, tmp3, tmp4
+'== Purpose:
+'================================================
+DriveStickInput:
+
+'----- Dead Zones
+'create a bit of a dead zone on the X & Y axis
+GET s_oi_swB, oi_swB
+GET s_drive_y, drive_y
+GET s_drive_x, drive_x
+if (drive_y < 127+DRIVE_DEADZONE) and (drive_y > 127-DRIVE_DEADZONE) then PUT s_drive_y, 127
+if (drive_x < 127+DRIVE_DEADZONE) and (drive_x > 127-DRIVE_DEADZONE) then PUT s_drive_x, 127
+'if (crab_top = 1) then PUT s_drive_x, 127
+
+'----- Wheel speed
+GET s_crab_x, crab_x
+GET s_crab_y, crab_y
+
+tank_steer_mode = 0
+
+'Had to split this complex 'if' statement into multiple 'if' statements because PBASIC can't handle it
+'If the crab stick is in the middle use tank style steering
+if ((crab_x > 127-CRAB_MODE_DEADZONE) AND (crab_x < 127+CRAB_MODE_DEADZONE) AND (crab_y > 127-CRAB_MODE_DEADZONE) AND (crab_y < 127+CRAB_MODE_DEADZONE)) then
+   tank_steer_mode = 1
+endif
+
+'If the crab stick near 90 degrees left use tank style steering
+if ((crab_x > JOYSTICK_MAX_VALUE-CRAB_MODE_DEADZONE) AND (crab_y > 127-CRAB_MODE_DEADZONE)) then
+   tank_steer_mode = 1
+endif
+
+
+if ((crab_x < JOYSTICK_MIN_VALUE+CRAB_MODE_DEADZONE) AND (crab_y > 127-CRAB_MODE_DEADZONE)) then
+   tank_steer_mode = 1
+endif
+
+if (tank_steer_mode = 1) then
+   '----- Tank steering mode
+   GET s_drive_y, drive_y
+   GET s_drive_x, drive_x
+
+   tmp3 = (((2000 + drive_y + drive_x - 127) Min 2000 Max 2254) - 2000) 'Right side
+   tmp4 = (((2000 + drive_y - drive_x + 127) Min 2000 Max 2254) - 2000) 'Left side
+
+   GET s_oi_swB, oi_swB
+   'If the top button is pressed or we are crabbed right then adjust the target by 90 degrees so
+   '  the front of the robot is changed to the right side
+   if ((crab_top = 1) OR (crab_x < JOYSTICK_MIN_VALUE+CRAB_MODE_DEADZONE)) then
+      'Since we are 90degrees adjusted, our right side is the front and left side is the back
+      PUT s_lb_wheel, tmp3
+      PUT s_rb_wheel, tmp3
+      PUT s_lf_wheel, tmp4
+      PUT s_rf_wheel, tmp4
+
+      'If the front skid pad is engaged, we need to disengage it and engage the
+      '  90 degree skid pad
+      GET s_relayA, relayA
+      if (relay2_fwd = 1) then
+         relay2_fwd = 0  'Disengage front skid pad
+         relay2_rev = 1
+         relay3_fwd = 1  'Engage 90 degree skid pad
+         relay3_rev = 0
+      endif
+      PUT s_relayA, relayA
+   else
+      'If we are crabbed left then adjust the target by 90 degrees so
+      '  the front of the robot is changed to the left side
+      if (crab_x > JOYSTICK_MAX_VALUE-CRAB_MODE_DEADZONE) then
+         'our left side is the front and right side is the back
+         PUT s_lf_wheel, tmp3
+         PUT s_rf_wheel, tmp3
+         PUT s_lb_wheel, tmp4
+         PUT s_rb_wheel, tmp4
+
+         'If the front skid pad is engaged, we need to disengage it and engage the
+         '  90 degree skid pad
+         GET s_relayA, relayA
+         if (relay2_fwd = 1) then
+            relay2_fwd = 0  'Disengage front skid pad
+            relay2_rev = 1
+            relay3_fwd = 1  'Engage 90 degree skid pad
+            relay3_rev = 0
+         endif
+         PUT s_relayA, relayA
+      else
+         PUT s_rf_wheel, tmp3
+         PUT s_rb_wheel, tmp3
+         PUT s_lf_wheel, tmp4
+         PUT s_lb_wheel, tmp4
+      endif
+   endif
+else
+   '----- Crab mode so make all motors run same speed
+   GET s_drive_y, drive_y
+   PUT s_rf_wheel, drive_y
+   PUT s_rb_wheel, drive_y
+   PUT s_lf_wheel, drive_y
+   PUT s_lb_wheel, drive_y
+endif
+
+
+'----- Anti-Turbo
+'if the turbo button is not pressed, slow the drive motors down by 50%
+GET s_oi_swB, oi_swB
+
+if (drive_top = 0) then
+   '--- Run at 50%
+   GET s_rf_wheel, tmp1
+   GET s_lf_wheel, tmp2
+   GET s_rb_wheel, tmp3
+   GET s_lb_wheel, tmp4
+
+
+   tmp1 = ((tmp1 * DRIVE_SCL_50 / 100) + DRIVE_CON_50 MAX 254)
+   tmp2 = ((tmp2 * DRIVE_SCL_50 / 100) + DRIVE_CON_50 MAX 254)
+   tmp3 = ((tmp3 * DRIVE_SCL_50 / 100) + DRIVE_CON_50 MAX 254)
+   tmp4 = ((tmp4 * DRIVE_SCL_50 / 100) + DRIVE_CON_50 MAX 254)
+
+   PUT s_rf_wheel, tmp1
+   PUT s_lf_wheel, tmp2
+   PUT s_rb_wheel, tmp3
+   PUT s_lb_wheel, tmp4
+endif
+
+#IF ACCELERATION_CODE #THEN
+   'do nothing, don't overwrite s_<wheel>_cur
+#ELSE
+   GET s_lf_wheel, tmp1
+   PUT s_lf_cur, tmp1
+   GET s_rf_wheel, tmp1
+   PUT s_rf_cur, tmp1
+   GET s_lb_wheel, tmp1
+   PUT s_lb_cur, tmp1
+   GET s_rb_wheel, tmp1
+   PUT s_rb_cur, tmp1
+#ENDIF
+
+return 'from DriveStickInput
+
+'===============================================
+'========= CrabStickInput Subroutine ===========
+
+'== Inputs:  s_crab_x - x axis of crab stick
+'== Outputs: s_rcrab_target - target (in binary degrees) of right crab modules
+'==          s_lcrab_target - target (in binary degrees) of left crab modules
+'== Modifys: crab_y
+'== Calls:   TwoAxisCrabSteering
+'==          NinetyDegOrientChange
+'== Purpose: Get the crab target from the crab joystick
+'===============================================
+CrabStickInput:
+
+'drives crab on x axis unless y axis is less than ONE_TWO_AXIS_CRAB_DIVIDER
+GET s_crab_y, crab_y
+if (crab_y >= ONE_TWO_AXIS_CRAB_DIVIDER) then   'joystick divider when in upper division one axis crab otherwise two axis crab
+  Gosub OneAxisCrabSteering                   'one axis crab
+
+  'Two Axis crab keeps track of where the stick is located.  If we are in one axis then set manybits
+  ' to indicate that we are in the top half/center.
+'  GET s_manybits, manybits  'manybits is now a persistent ram variable across banks
+  nvr_manybits__prev_loop_ctr = TWO_AXIS_CENTER
+'  PUT s_manybits, manybits  'manybits is now a persistent ram variable across banks
+
+else
+  Gosub TwoAxisCrabSteering                     'two axis crab
+endif
+
+'See if we need to change the front of the robot to the side if the robot
+
+'GET s_oi_swB, oi_swB
+'if (crab_top = 1) then
+'  GET s_drive_x, drive_x 
+  
+'  if (crab_x > DRIVE_STICK_CENTER) then
+'    tmp4 = CRAB_NINETY_DEGREE - ((crab_x - DRIVE_STICK_CENTER)/10)
+'    tmp5 = CRAB_NINETY_DEGREE + ((crab_x - DRIVE_STICK_CENTER)/10)
+'  else
+'    tmp4 = CRAB_NINETY_DEGREE + ((DRIVE_STICK_CENTER - crab_x)/10)
+'    tmp5 = CRAB_NINETY_DEGREE - ((DRIVE_STICK_CENTER - crab_x)/10)
+'  endif
+'  PUT s_rcrab_target, tmp4
+'  PUT s_lcrab_target, tmp5    
+'endif
+
+GET s_oi_swB, oi_swB
+if (crab_top = 1) then
+  
+  GET s_rcrab_target, tmp4
+  GET s_lcrab_target, tmp5    
+  tmp4 = tmp4 - 12
+  tmp5 = tmp5 + 12
+     
+  PUT s_rcrab_target, tmp4
+  PUT s_lcrab_target, tmp5    
+endif
+return  'From CrabStickInput
+
+
+'========= OneAxisCrabSteering Subroutine ===========
+'== Inputs:  s_crab_x - x axis of crab stick
+'== Outputs: s_rcrab_target - target (in binary degrees) of crab modules
+'==          s_lcrab_target - target (in binary degrees) of crab modules
+'== Modifys: tmp1
+'== Calls:
+'== Purpose: Turn wheels 90 degrees in each direction based on the X value of the crab joystick
+'===============================================
+OneAxisCrabSteering:
+'drive crab on one axis turning a maximum of ninety
+GET s_crab_x, tmp1
+
+'Since the joystick only goes from 13-250 we should scale this to 0-255
+if(tmp1 > 127) then
+  tmp1 = tmp1 MAX JOYSTICK_MAX_VALUE    'Make sure joystick didn't go over advertized max...avoids wrap around
+  tmp1 = (127 + ((tmp1-127) * 127/JOYSTICK_TRAVEL_HI))  'Scale joystick max to 255
+else
+  tmp1 = tmp1 MIN JOYSTICK_MIN_VALUE    'Make sure joystick didn't go under advertized min...avoids wrap around
+  tmp1 = (127 - ((127-tmp1) * 127/JOYSTICK_TRAVEL_LOW)) 'Scale joystick min to 0
+endif
+
+'if (tmp1 = 96 + 45_DEGREE_DEADZONE) or (tmp1 = 96 - 45_DEGREE_DEADZONE) then
+'  PUT s_rcrab_target, 96
+'  PUT s_lcrab_target, 96
+'else
+'  if (tmp1 = 157 + 45_DEGREE_DEADZONE) or (tmp1 = 157 - 45_DEGREE_DEADZONE) then
+'    PUT s_rcrab_target, 157
+'    PUT s_lcrab_target, 157
+
+if (tmp1 > 127 - ONE_AXIS_DEADZONE) and (tmp1 < 127 + ONE_AXIS_DEADZONE) then  'keep wheels straight unless 
+  PUT s_rcrab_target, 127                      'joystick turned out of deadzone
+  PUT s_lcrab_target, 127
+else
+  if (tmp1 > 127 + ONE_AXIS_DEADZONE) then    'turn the wheels to the left
+    tmp5 = 127 + ((tmp1-127) / 2)
+    PUT s_rcrab_target, tmp5                   'scale so we turn 180 degrees to ninety degrees
+    PUT s_lcrab_target, tmp5
+  else
+    if (tmp1 < 127 - ONE_AXIS_DEADZONE) then  'turn the wheels to the right
+      tmp5 = 127 - ((127 - tmp1) / 2) 
+      PUT s_rcrab_target, tmp5                 'scale so we turn 180 degrees to ninety degrees 
+      PUT s_lcrab_target, tmp5
+    endif
+  endif
+endif
+
+return 'From OneAxisCrabSteering
+
+'==================================================
+'========= 90 Degree Orientation Change ===========
+'== Inputs:  tmp5 = Current crab target in brads
+'==          s_oi_swB (crab_top) - top buttons of crab stick
+'== Outputs: tmp5 = New crab target, adjusted by 90 degrees if top button is pressed
+'== Purpose: Change the front of the robot if top button is pressed
+'==================================================
+NinetyDegOrientChange:
+
+GET s_oi_swB, oi_swB
+
+'If the top button is pressed then adjust the target by 90 degrees so
+'  the front of the robot is changed to the right side
+'if crab_top = 1 then
+  'Make sure we don't try to rotate the wheels beyond the 180 degree point
+
+'  if (tmp5 < 64) then
+     'Straight back is as far back as we allow
+'     tmp5 = 0
+'  else
+     'Subtract 90 degrees (64 brads) to swap the front of the robot
+'     tmp5 = tmp5 - 64
+'  endif
+'endif
+
+
+
+return 'from NinetyDegOrientChange
+
+
+'====================================================
+'========= TwoAxisCrabSteering Subroutine ===========
+'== Inputs:  s_crab_x - x axis of crab stick
+'==          s_crab_y - y axis of crab stick
+'== Outputs: s_rcrab_target - target (in binary degrees) of right crab modules
+'==          s_lcrab_target - target (in binary degrees) of left crab modules
+'== Modifys: crab_x, crab_y, tmp1, tmp2, tmp5
+'== Calls:   ArcTan
+'== Purpose: convert x&y position on crab joystick to binary degrees
+'====================================================
+TwoAxisCrabSteering:
+
+GET s_crab_x, crab_x
+GET s_crab_y, crab_y
+
+
+if ((crab_x > 127-TWO_AXIS_DEADZONE) and (crab_x < 127+TWO_AXIS_DEADZONE) and (crab_y > 127-TWO_AXIS_DEADZONE) and (crab_y < 127+TWO_AXIS_DEADZONE)) then
+   tmp5 = 127
+else
+   'must figure out which quadrant the stick is in and take the difference between
+   '  stick position and center of stick to get Opposite & Adjacent.  Get angle
+   '  from ArcTan subroutine.  Convert from degrees to binary degrees.  Offset
+   '  result to put angle in correct quadrant
+   if (crab_x < 127) then
+      if (crab_y > 127) then
+         'quadrant 1
+         tmp1 = crab_y - 127
+         tmp2 = 127 - crab_x
+         Gosub ArcTan
+         tmp5 = 63 + tmp5
+      else
+         'quadrant 4
+         tmp1 = 127 - crab_x
+         tmp2 = 127 - crab_y
+         Gosub ArcTan
+      endif
+   else
+      if (crab_y > 127) then
+         'quadrant 2
+         tmp1 = crab_x - 127
+         tmp2 = crab_y - 127
+         Gosub ArcTan
+         tmp5 = 127 + tmp5
+      else
+         'quadrant 3
+         tmp1 = 127 - crab_y
+         tmp2 = crab_x - 127
+         Gosub ArcTan
+         tmp5 = (191 + tmp5) MAX 255
+      endif
+   endif
+endif
+
+'At this point tmp5 is the crab_target.  We need to now handle the case where the driver moves the
+'  joystick from the lower left to lower right.  We don't want the crabs to wip around in this case.
+'  So, the only way to go from the lower left to the lower right (or vise versa) is to go through
+'  the center (191-64) first.
+' Inputs:  tmp5 = current crab target
+' Outputs: tmp5 = new crab target (if override is needed)
+
+'GET s_manybits, manybits  'manybits is now a persistent ram variable across banks
+
+'If previously we were on the left side of the stick but the new value is to the right then we
+'  want to set the target to be the largest value on the left.
+if (nvr_manybits__prev_loop_ctr = TWO_AXIS_NOT_CENTER and nvr_manybits__prev_loop_dir = TWO_AXIS_LEFT) and (tmp5 < STICK_RIGHT_SIDE) then
+    tmp5 = 254  'Left most value
+else
+    'Now make sure the same problem is happening on the right size.
+    if (nvr_manybits__prev_loop_ctr = TWO_AXIS_NOT_CENTER and nvr_manybits__prev_loop_dir = TWO_AXIS_RIGHT) and (tmp5 > STICK_LEFT_SIDE) then
+        tmp5 = 0  'Right most value
+    endif
+endif
+
+' This stores the joysticks previous loop value
+if (tmp5 > STICK_LEFT_SIDE) then
+    nvr_manybits__prev_loop_dir = TWO_AXIS_LEFT
+    nvr_manybits__prev_loop_ctr = TWO_AXIS_NOT_CENTER
+else
+    if (tmp5 < STICK_RIGHT_SIDE) then
+        nvr_manybits__prev_loop_dir = TWO_AXIS_RIGHT
+        nvr_manybits__prev_loop_ctr = TWO_AXIS_NOT_CENTER
+    else
+        nvr_manybits__prev_loop_ctr = TWO_AXIS_CENTER
+    endif
+endif
+
+'debug "prev loop dir ", DEC nvr_manybits__prev_loop_dir, "  ctr ", DEC nvr_manybits__prev_loop_ctr, CR
+
+'PUT s_manybits, manybits  'manybits is now a persistent ram variable across banks
+PUT s_rcrab_target, tmp5
+PUT s_lcrab_target, tmp5
+
+return 'from TwoAxisCrabSteering
+
+
+'=================================================
+'========= CrabManuOverride Subroutine ===========
+'== Inputs:  s_crab_x - x axis of crab stick
+'==          s_oi_swB (crab_top, crab_trig) - top & trigger buttons of crab stick
+'== Outputs: s_right_crab - right crab motor speed
+'==          s_left_crab - left crab motor speed
+'== Modifys: crab_x, oi_swB
+'== Purpose: control the crab motors in manual override mode
+'=================================================
+CrabManuOverride:
+
+'x axis is backwards (left gives a higher value)
+GET s_crab_x, crab_x
+GET s_oi_swB, oi_swB
+
+crab_x = crab_x MIN (127-CRAB_MANU_SPEED) MAX (127+CRAB_MANU_SPEED)
+
+if (crab_top = 1) then
+   'right crab
+   PUT s_right_crab, crab_x
+else
+   PUT s_right_crab, 127
+endif
+
+if (crab_trig = 1) then
+   'left crab
+   PUT s_left_crab, crab_x
+else
+   PUT s_left_crab, 127
+endif
+
+return 'from CrabManuOverride
+
+'=======================================
+'========= ArcTan Subroutine ===========
+'== Inputs:  tmp1 - opposite
+'==          tmp2 - adjacent
+'== Outputs: tmp5 - angle (in brads)
+'== Modifys: tmp1, tmp2, tmp4, tmp5
+'== Purpose: return the arctan of an opposite/adjecent pair
+'==          Assumes calling function takes care of quadrant
+'=======================================
+ArcTan:
+'tmp1 is the passed in "opposite", and tmp2 is the passed in "adjacent"
+
+if ((tmp1 = 0) and (tmp2 = 0)) then
+   'Passed in opp and adj are both zero...should not happen but keep from
+   '  a divide by zero and just return angle of zero
+   tmp5 = 0
+else
+   'We always want our opposite to be smaller than our adjacent so we only have
+
+   '  to deal with 45 degrees or smaller.  If the passed in opposite is larger,
+   '  we simply reverse them and calucalute the other angle prior to output.
+   if (tmp1 < tmp2) then
+      'Passed in opp is smaller than adj...perfect!
+      'tmp4 is the swap_angle flag
+      tmp4 = 0
+   else
+      'Passed in opp is larger than adj...swap it and set the
+      '  swap_angle flag so we will calculate the exact angle prior to output
+      tmp5 = tmp1
+      tmp1 = tmp2
+      tmp2 = tmp5
+      tmp4 = 1     'swap_angle flag = true
+   endif
+
+   'This is a TAN lookup table that will convert (opp/adj)*64 into an angle from 0-32 brads(45 degrees).
+   '  Since the angle must be less than 45 degrees, the opposite MUST be less than the adj side.
+   '  NOTE: (a<<6) is the same as (a*64), but the shifting is much faster in hardware.
+  LOOKUP ((tmp1<<6)/tmp2),  [0, 1, 1, 2, 3, 3, 4, 4, 5, 6,  6, 7, 8, 8, 9, 9, 10,11,11,12,
+                             12,13,13,14,15,15,16,16,17,17, 18,18,19,19,20,20,21,21,22,22,
+                             23,23,24,24,25,25,25,26,26,27, 27,27,28,28,29,29,29,30,30,30,
+                             31,31,31,32,32], tmp5 
+
+  '------------ OLD ANGLE TABLE --------------------------------------------------------------------
+  'LOOKUP (100*tmp1/tmp2), [0 ,0 ,1 ,2 ,2 ,3 ,4 ,4 ,5 ,5,   6 ,6 ,7 ,7 ,8 ,9 ,9 ,10,10,11,
+  '                          11,12,12,13,14,14,15,15,16,16,  17,17,18,18,19,19,20,20,21,21,
+  '                          22,22,23,23,24,24,25,25,26,26,  27,27,27,28,29,29,29,30,30,31,
+  '                          31,31,32,32,33,33,33,34,34,35,  35,35,36,36,36,37,37,38,38,38,
+  '                          39,39,39,40,40,40,41,41,41,42,  42,42,43,43,43,44,44,44,44,45,45], tmp5
+  '-------------------------------------------------------------------------------------------------
+
+   'If we swapped the opposite and adjacent then we have to convert to the other
+   '  angle in the triangle.  This is simple, just subtract from 90 degrees (64 brads).
+   if (tmp4 = 1) then
+      'swap_angle flag was set...calculate the other angle in the triangle.
+      tmp5 = 64 - tmp5
+   endif
+endif
+
+return 'from ArcTan
+
+
+

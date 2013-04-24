@@ -1,0 +1,754 @@
+' {$PBASIC 2.5}
+' {$STAMP BS2sx}
+
+
+
+'=============================================================================================================
+'========== CONDITIONAL COMPILATION ==========================================================================
+'=============================================================================================================
+' To prevent code from being compiled simply comment out the #DEFINE line
+#DEFINE ACCELERATION_CODE
+
+' Comment out line to use pot & joystick values for proto robot
+#DEFINE COMPETITION_ROBOT
+
+'=============================================================================================================
+'========== DECLARE VARIABLES ================================================================================
+'=============================================================================================================
+'  Below is a list of declared input and output variables.  Comment or un-comment
+'  the variables as needed.  Declare any additional variables required in
+'  your main program loop.  Note that you may only use 26 total variables.
+
+'---------- Misc. MUST BE THE FIRST VARIABLES IN ALL BANKS ---------------------------------------------------
+'------PERSISTENT VARIABLES -- VALID IN ALL BANKS ------------------------------------------------------------
+'NOTE:In order for these variables to be valid in ALL banks, they must be in the exact same spot in each bank.
+'     To do this, just always keep these as the first variables in each bank.
+'packet_num               VAR byte
+'delta_t                  VAR byte
+
+'---------- Aliases for the Pbasic Mode Byte (nvr_PB_mode) -------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Bit 7 of the nvr_PB_mode byte (aliased as comp_mode below) indicates the status
+'  of the Competition Control, either Enabled or Disabled.  This indicates the
+'  starting and stopping of rounds at the competitions.
+'  Comp_mode is indicated by a solid "Disabled" LED on the Operator Interface.
+'  Comp_mode = 1 for Enabled, 0 for Disabled.
+'
+'  Bit 6 of the nvr_PB_mode byte (aliased as auton_mode below) indicates the status
+'  of the Autonomous Mode, either Autonomous or Normal.  This indicates when
+'  the robot must run on its own programming.  When in Autonomous Mode, all
+'  OI analog inputs are set to 127 and all OI switch inputs are set to 0 (zero).
+'  Auton_mode is indicated by a blinking "Disabled" LED on the Operator Interface.
+'  Auton_mode = 1 for Autonomous, 0 for Normal.
+'
+'  Autonomous Mode can be turned ON by setting the RC to Team 0 (zero).
+
+'
+'  Bit 5 of the nvr_PB_mode byte (aliased as user_display_mode below) indicates when
+'  the user selects the "User Mode" on the OI.  nvr_PB_mode.bit5 is set to 1 in "User Mode".
+'  When the user selects channel, team number, or voltage, nvr_PB_mode.bit5 is set to 0
+'  When in "User Mode", the eight Robot Feedback LED are turned OFF.
+'  Note: "User Mode" is identified by the letter u in the left digit (for 4 digit OI's)
+'  Note: "User Mode" is identified by decimal places on the right two digits (for 3 digit OI's)
+nvr_PB_mode                    VAR byte
+nvr_PB_mode__comp_mode         VAR nvr_PB_mode.bit7
+nvr_PB_mode__auton_mode        VAR nvr_PB_mode.bit6
+nvr_PB_mode__user_display_mode VAR nvr_PB_mode.bit5 
+
+nvr_manybits                   VAR byte
+nvr_manybits__twitchdone       VAR nvr_manybits.bit0
+nvr_manybits__crab_broken      VAR nvr_manybits.bit1
+nvr_manybits__first_loop       VAR nvr_manybits.bit2
+nvr_manybits__first_auto_loop  VAR nvr_manybits.bit3
+nvr_manybits__prev_loop_ctr    VAR nvr_manybits.bit4
+nvr_manybits__prev_loop_dir    VAR nvr_manybits.bit5
+nvr_manybits__fwing_brake      VAR nvr_manybits.bit6
+nvr_manybits__bwing_brake      VAR nvr_manybits.bit7
+
+'---------- Operator Interface (OI) - Analog Inputs ----------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+p1_x		VAR byte	'Port 1, X-axis on Joystick
+
+drive_x		VAR byte	'Drive stick X-axis
+
+p3_x		VAR byte	'Port 3, X-axis on Joystick
+
+crab_x		VAR byte	'Crab stick X-axis
+
+p1_y		VAR byte	'Port 1, Y-axis on Joystick
+
+drive_y		VAR byte	'Drive stkci Y-axis
+
+'p3_y		VAR byte	'Port 3, Y-axis on Joystick
+
+crab_y		VAR byte	'Crab stick Y-axis
+
+p1_wheel	VAR byte	'Port 1, Wheel on Joystick
+
+'p2_wheel	VAR byte	'Port 2, Wheel on Joystick
+
+'p3_wheel	VAR byte	'Port 3, Wheel on Joystick
+
+'p4_wheel	VAR byte	'Port 4, Wheel on Joystick
+
+'p1_aux		VAR byte	'Port 1, Aux on Joystick
+
+'p2_aux		VAR byte	'Port 2, Aux on Joystick
+
+'p3_aux		VAR byte	'Port 3, Aux on Joystick
+
+
+'p4_aux		VAR byte	'Port 4, Aux on Joystick
+
+
+
+
+'---------- Operator Interface - Digital Inputs --------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+oi_swA		VAR byte	'OI Digital Switch Inputs 1 thru 8
+oi_swB		VAR byte	'OI Digital Switch Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Inputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+rc_swA		VAR byte	'RC Digital Inputs 1 thru 8
+'rc_swB		VAR byte	'RC Digital Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Outputs ---------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+relayA		VAR byte
+relayB		VAR byte
+
+'---------- Temporary Variables ------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+tmp1		VAR byte
+tmp2		VAR byte
+tmp3		VAR byte
+tmp4		VAR byte
+tmp5		VAR byte
+tmp6		VAR byte
+tmp7		VAR byte
+tmp8		VAR byte
+
+'Keep track of the the user_mode bit (RC request to see user data instead of LEDs) 
+tmp1_manybits2__force_auto     VAR tmp1.bit0    'User requested robot to run auto regardless of auton bit from OI 
+tmp1_manybits2__prev_user_mode VAR tmp1.bit1    'Previous loop value of the PBMode.user_mode
+tmp1_manybits2__many2          VAR tmp1.bit2
+tmp1_manybits2__many3          VAR tmp1.bit3
+tmp1_manybits2__loop_cnt       VAR tmp1.HIGHNIB 'Keep loop count...incrememnted each loop
+
+'=============================================================================================================
+'========== DEFINE ALIASES ===================================================================================
+'=============================================================================================================
+'  Aliases are variables which are sub-divisions of variables defined
+'  above.  Aliases don't require any additional RAM.
+
+
+'---------- Aliases for each OI switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Operator Interface.
+'  Ports 1 & 3 have their inputs duplicated in ports 4 & 2 respectively.  The 
+'  inputs from ports 1 & 3 may be disabled via the 'Disable' dip switch 
+'  located on the Operator Interface.  See Users Manual for details.
+
+fwing_up_sw	VAR oi_swA.bit0	'p1_sw_trig
+fwing_dn_sw	VAR oi_swA.bit1	'p1_sw_top
+bwing_up_sw	VAR oi_swA.bit2	'p1_sw_aux1
+bwing_dn_sw	VAR oi_swA.bit3	'p1_sw_aux2
+
+stacker_up_sw	VAR oi_swA.bit4	'p3_sw_trig
+stacker_dn_sw	VAR oi_swA.bit5	'p3_sw_top
+scraper_sw	VAR oi_swA.bit6	'p3_sw_aux1
+crab_ovr_sw	VAR oi_swA.bit7	'p3_sw_aux2
+
+p2_sw_trig	VAR oi_swB.bit0	'p2_sw_trig
+p2_sw_top	VAR oi_swB.bit1	'p2_sw_top
+p2_sw_aux1	VAR oi_swB.bit2	'p2_sw_aux1
+p2_sw_aux2	VAR oi_swB.bit3	'p2_sw_aux2
+
+crab_trig	VAR oi_swB.bit4	'p4_sw_trig
+crab_top	VAR oi_swB.bit5	'p4_sw_top
+drive_trig	VAR oi_swB.bit6	'p4_sw_aux1
+drive_top	VAR oi_swB.bit7	'p4_sw_aux2
+
+
+'---------- Aliases for each RC switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Robot Controller.
+
+rc_sw1		VAR rc_swA.bit0
+rc_sw2		VAR rc_swA.bit1
+rc_sw3		VAR rc_swA.bit2
+rc_sw4		VAR rc_swA.bit3
+rc_sw5		VAR rc_swA.bit4
+rc_sw6		VAR rc_swA.bit5
+rc_sw7		VAR rc_swA.bit6
+rc_sw8		VAR rc_swA.bit7
+
+'---------- Aliases for each RC Relay outputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the relay outputs located on the Robot Controller.
+
+relay1_fwd	VAR relayA.bit0
+relay1_rev	VAR relayA.bit1
+relay2_fwd	VAR relayA.bit2
+relay2_rev	VAR relayA.bit3
+relay3_fwd	VAR relayA.bit4
+relay3_rev	VAR relayA.bit5
+relay4_fwd	VAR relayA.bit6
+relay4_rev	VAR relayA.bit7
+
+relay5_fwd	VAR relayB.bit0
+relay5_rev	VAR relayB.bit1
+relay6_fwd	VAR relayB.bit2
+relay6_rev	VAR relayB.bit3
+relay7_fwd	VAR relayB.bit4
+relay7_rev	VAR relayB.bit5
+relay8_fwd	VAR relayB.bit6
+relay8_rev	VAR relayB.bit7
+
+'=============================================================================
+'SHARED Constants (these are used by more than one bank and MUST AGREE in each) 
+TRUE		CON 1
+FALSE		CON 0
+
+'=============================================================================
+'Constants for Scratchpad ram locations [0-62] (63 reserved)
+'(these constants are shared and must agree in all banks) 
+
+'(I just reserved these in the order they come in the serin stream)
+
+s_oi_swA	CON	0
+s_oi_swB	CON	1
+s_rc_swA	CON	2
+s_drive_x       CON     3
+s_drive_y       CON     4
+s_crab_x        CON     5
+s_crab_y        CON     6
+s_fwing_oi      CON     7
+s_bwing_oi      CON     8
+s_stacker_oi    CON     9
+s_manybits2	CON	10  'additional status bits
+'s_packet_num 	CON	11
+s_lcrab_pot	CON	12	'left crab pot
+s_rcrab_pot	CON	13	'right crab pot
+
+s_fwing_pot	CON	15	'front wing pot
+s_bwing_pot	CON	16	'back wing pot
+
+'s_p3_y		CON	17
+s_stacker_pot	CON	18	'stacker pot
+'s_sensor6	CON	19
+'s_p2_wheel	CON	20
+'s_p1_wheel	CON	21
+'s_sensor7	CON	22
+'(...end of possible serin inputs.  continue now, with outputs and stored user variables.) 
+
+s_stacker_tgt   CON     25
+
+'s_waypoint_sel  CON     26
+'s_waypoint_flgs CON     27   'flags associated with waypoint
+
+s_curr_pos_x	CON	32
+s_curr_pos_y	CON	33
+s_curr_orient	CON	34   'current compass value (or theta) of the robot
+s_target_orient CON     35   'target compass value of the robot
+
+s_fwing_wp_tgt  CON     36
+s_bwing_wp_tgt  CON     37
+
+s_waypoint 	CON	38
+s_target_heading CON	39
+
+s_relayA	CON	40
+s_relayB	CON	41
+
+s_fwing_tgt	CON	42
+s_bwing_tgt	CON	43
+
+s_rcrab_target	CON	44
+s_lcrab_target	CON	45
+s_right_crab	CON	46  'crab steering motor speed
+s_left_crab	CON	47
+s_rcrab_init	CON	48
+s_lcrab_init	CON	49
+
+s_lf_cur	CON	50  'current speed of drive wheels
+s_rf_cur	CON	51
+s_lb_cur	CON	52
+s_rb_cur	CON	53
+
+s_lf_wheel	CON	54  'stored value for left_wheel 
+s_rf_wheel	CON	55
+s_lb_wheel	CON	56
+s_rb_wheel	CON	57
+
+s_front_wing	CON	58  'current speed of wings
+s_back_wing	CON	59
+s_stacker       CON     60  'current speed of stacker
+
+s_bat_volt	CON	62
+s_banknumber	CON	63  'Read-Only
+
+' ...insert any other storage names up to 62 that are useful... 
+
+
+
+'      ____ ___  _   _ ____ _____  _    _   _ _____ ____
+'     / ___/ _ \| \ | / ___|_   _|/ \  | \ | |_   _/ ___|
+'    | |  | | | |  \| \___ \ | | / _ \ |  \| | | | \___ \
+'    | |__| |_| | |\  |___) || |/ ___ \| |\  | | |  ___) |
+'     \____\___/|_| \_|____/ |_/_/   \_\_| \_| |_| |____/
+'
+'Bank Constants (only used in this bank)
+ANALOG_TO_BUTTON_HIGH      CON	200 'threshold for analog buttons
+DRIVE_DEADZONE             CON	5
+DRIVE_ACCEL_RATE           CON	35
+DRIVE_SCL_50               CON	50  'turbo drive speed reduction (percent) [e.g. 50]
+DRIVE_CON_50               CON	64  '128 * (1- reduction percent) [e.g. 64] 
+DRIVE_SCL_25               CON	25
+DRIVE_CON_25               CON	96
+
+
+CRAB_FAST_RIGHT            CON	126 'must be < 127
+CRAB_MED_RIGHT             CON	80
+CRAB_SLOW_RIGHT            CON	35
+
+CRAB_FAST_LEFT             CON	126 'must be < 127
+CRAB_MED_LEFT              CON	70
+CRAB_SLOW_LEFT             CON	30
+
+CRAB_POSITION_NEAR_RIGHT   CON	2
+CRAB_POSITION_CLOSE_RIGHT  CON	15
+CRAB_POSITION_FAR_RIGHT    CON	40
+
+CRAB_POSITION_NEAR_LEFT    CON	3
+CRAB_POSITION_CLOSE_LEFT   CON	25
+CRAB_POSITION_FAR_LEFT     CON	50
+
+#IF COMPETITION_ROBOT #THEN
+'=================CHANGE THESE IN BANK2 ALSO!!!!!!!!!!!!!!!!!!!!!
+'=================Competition Robot=========
+POT_RCRAB_RIGHT_180        CON  11       'Right Pot reading for 0 brads (180 degrees to the right)
+POT_RCRAB_LEFT_180         CON  244     'Right Pot reading for 255 brads (180 degrees to the left)
+
+POT_LCRAB_RIGHT_180        CON  9       'Left Pot reading for 0 brads (180 degrees to the right)
+POT_LCRAB_LEFT_180         CON  242     'Left Pot reading for 255 brads (180 degrees to the left)
+'=================END CHANGE BANK2 WARNING!!!!!!!!!!!!!!!!!!!!!!!
+#ELSE
+'=================CHANGE THESE IN BANK2 ALSO!!!!!!!!!!!!!!!!!!!!!
+'=================Proto Robot===============
+POT_RCRAB_RIGHT_180        CON  12      'Right Pot reading for 0 brads (180 degrees to the right)
+POT_RCRAB_LEFT_180         CON  243     'Right Pot reading for 255 brads (180 degrees to the left)
+
+POT_LCRAB_RIGHT_180        CON  12      'Left Pot reading for 0 brads (180 degrees to the right)
+POT_LCRAB_LEFT_180         CON  243     'Left Pot reading for 255 brads (180 degrees to the left)
+'=================END CHANGE BANK2 WARNING!!!!!!!!!!!!!!!!!!!!!!!
+#ENDIF
+
+POT_CRAB_RIGHT_LIMIT       CON  5           'Limit of the pot value to the right   
+POT_CRAB_LEFT_LIMIT        CON  250         'Limit of the pot value to the left 
+
+MAX_CRAB_TARG_DIFF         CON 10  'Max value in brads that the two crab modules can be off from each other
+                                   '  to create a theta/orient change.
+
+'NOTE: CC MUST be the bitwise NOT of CW for the code to work
+CC_ROTATION_NEEDED         CON 1   'CounterClockwise rotation is needed to get to target theta
+CW_ROTATION_NEEDED         CON 0   'Clockwise rotation is needed to get to target theta
+ORIENT_ADJUST_DEAD_ZONE    CON 2   'If we are w/in this many brads (plus or minus) of our theta/orientation 
+                                   ' targ then no adjustment
+
+'=============================================================================================================
+'========== MAIN CODE ========================================================================================
+'=============================================================================================================
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+
+if nvr_PB_mode__auton_mode = 1 then
+   'do Autonomous stuff
+   Gosub AccelSystem
+   Gosub CrabSystem
+else
+   '----- Drive
+   Gosub AccelSystem
+
+   '----- Crab
+   'Manual override check
+   GET s_oi_swA, oi_swA
+   if ((nvr_manybits__crab_broken = 1) or (crab_ovr_sw = 1)) then
+   else
+      Gosub CrabSystem
+   endif
+endif
+
+nvr_manybits__first_loop = 0
+
+Run 1
+
+'============================================
+'========= AccelSystem Subroutine ===========
+'== Inputs:  s_<all_wheels>_wheel - target wheel speed
+'==          s_<all_wheels>_curr - current wheel speed
+'== Outputs: s_<all_wheels>_curr - new wheel speed
+'== Modifys: tmp1, tmp2
+'== Calls:   AccelRoutine
+'== Purpose: Slowly accelerate/decelerate all the wheels
+'============================================
+AccelSystem:
+'Acceleration/Braking/Coasting control 
+'this limits the rate that the speed changes (and braking)
+'which can help smooth out control, and limit the worst case
+'current draw when e.g. going from full forward to full reverse. 
+
+#IF ACCELERATION_CODE #THEN
+GET s_lf_wheel, tmp1   'get intended wheel speed (target) 
+GET s_lf_cur, tmp2     'get current wheel speed 
+gosub AccelRoutine:
+PUT s_lf_cur, tmp2
+
+GET s_rf_wheel, tmp1
+GET s_rf_cur, tmp2
+gosub AccelRoutine:
+PUT s_rf_cur, tmp2
+
+GET s_lb_wheel, tmp1
+GET s_lb_cur, tmp2
+gosub AccelRoutine:
+PUT s_lb_cur, tmp2
+
+GET s_rb_wheel, tmp1
+GET s_rb_cur, tmp2
+gosub AccelRoutine:
+PUT s_rb_cur, tmp2
+#ELSE
+
+GET s_lf_wheel, tmp1   'get intended wheel speed (target) 
+PUT s_lf_cur, tmp1
+
+GET s_rf_wheel, tmp1
+PUT s_rf_cur, tmp1
+
+GET s_lb_wheel, tmp1
+PUT s_lb_cur, tmp1
+
+GET s_rb_wheel, tmp1
+PUT s_rb_cur, tmp1
+
+#ENDIF
+
+return 'from AccelSystem
+
+
+
+'=============================================
+'========= AccelRoutine Subroutine ===========
+'== Inputs:  tmp1 - desired wheel speed
+'==          tmp2 - current wheel speed
+'== Outputs: tmp2 - new wheel speed
+'== Modifys: tmp2
+
+'== Purpose: increase/decrease the current wheel speed towards desired wheel speed
+'=============================================
+#IF ACCELERATION_CODE #THEN
+AccelRoutine:
+
+if ((tmp2 >= (tmp1 - DRIVE_ACCEL_RATE)) and (tmp2 <= (tmp1 + DRIVE_ACCEL_RATE))) then
+   'if current speed is close to target speed set it exactly to target speed
+   '(helps us come to a complete stop) 
+   tmp2 = tmp1 
+else
+   if (tmp2 < tmp1) then
+      'add to the current speed (velocity) 
+      tmp2 = (tmp2 + DRIVE_ACCEL_RATE) MAX 254
+   else
+      'subtract from the current speed
+      tmp2 = ((tmp2 MIN DRIVE_ACCEL_RATE) - DRIVE_ACCEL_RATE)
+   endif
+endif
+
+return  'from AccelRoutine
+#ENDIF
+
+
+'===========================================
+'========= CrabSystem Subroutine ===========
+'== Inputs:  s_lcrab_pot, s_rcrab_pot       - current crab position in pot ticks (pot reading)
+'==          s_rcrab_target, s_rcrab_target - target crab position in brads
+'== Outputs: s_left_crab, s_right_crab - speed of crab motors
+'== Modifys: tmp1, tmp2
+'==          s_rcrab_target, s_rcrab_target - target crab position is now in pot ticks      
+'== Calls:   CrabScaling
+'==          CrabFeedback
+'== Purpose: Turn the crab wheels towards the target
+'===========================================
+CrabSystem:
+
+'Handle any orientation (theta) adjustments from a crab standpoint.  This call will adjust
+'  the r/lcrab_targets to change the orientation of the robot.
+Gosub CrabOrientAdjust
+
+'Need to scale from binary degrees to pot values
+'At this point the right target is in brads
+GET s_rcrab_target, tmp1
+tmp2 = POT_RCRAB_LEFT_180
+tmp3 = POT_RCRAB_RIGHT_180
+Gosub CrabScaling          'Brads->Pot ticks
+PUT s_rcrab_target, tmp1
+'At this point the right target is in pot ticks
+
+'At this point the left target is in brads
+GET s_lcrab_target, tmp1
+tmp2 = POT_LCRAB_LEFT_180
+tmp3 = POT_LCRAB_RIGHT_180
+Gosub CrabScaling          'Brads->Pot ticks
+
+PUT s_lcrab_target, tmp1
+'At this point the left target is in pot ticks
+
+'Now make sure that the pot target is not greater than the edge of the pot
+GET s_rcrab_target, tmp1
+
+if (tmp1 > POT_CRAB_LEFT_LIMIT) then
+    PUT s_rcrab_target, POT_CRAB_LEFT_LIMIT
+else
+    if (tmp1 < POT_CRAB_RIGHT_LIMIT) then
+        PUT s_rcrab_target, POT_CRAB_RIGHT_LIMIT
+    endif
+endif
+
+
+GET s_lcrab_target, tmp1
+
+if (tmp1 > POT_CRAB_LEFT_LIMIT) then
+    PUT s_lcrab_target, POT_CRAB_LEFT_LIMIT
+else
+    if (tmp1 < POT_CRAB_RIGHT_LIMIT) then
+        PUT s_lcrab_target, POT_CRAB_RIGHT_LIMIT
+    endif
+endif
+
+
+'left crab
+GET s_lcrab_pot, tmp1
+GET s_lcrab_target, tmp3
+Gosub CrabFeedbackLeft
+PUT s_left_crab, tmp2
+
+'right crab
+GET s_rcrab_pot, tmp1
+GET s_rcrab_target, tmp3
+Gosub CrabFeedbackRight
+
+PUT s_right_crab, tmp2
+
+return 'from CrabSystem
+
+'===========================================
+'========= CrabOrientAdjust Subroutine =====
+'== Inputs:  s_curr_orient       - current robot orientation (theta) in brads
+'==          s_target_orient     - target robot orientation in brads
+'==          s_lf_wheel          - target wheel speed (direction is all we are looking for)
+'==          s_rcrab_target, s_lcrab_target - current target crab position in brads
+'== Outputs: s_rcrab_target, s_lcrab_target - updated target crab positions for orientation change
+'== Modifys: tmp1, tmp2, tmp3, tmp4, tmp5
+'==          s_rcrab_target, s_lcrab_target - as explained in outputs
+'== Calls:   
+'== Purpose: Adjust the crab targets so that they will cause the robot to change its orientation
+'==          tword the requested orientation target.  To cause an orientation change, we must make the
+'==          right and left wheels point to a slightly different target.  This mismatch between the two
+'==          sets of crab wheels will cause the robot to "twist" tword the target compass value.
+'==          Note, this type of orientation change can only happen when the robot is moving since it only 
+'==          affects the crab wheels, not wheel speed.
+'==          KEY TO UNDERSTANDING->orient 64=9 O'Clock, 127=12 O'Clock, 191=3 O'Clock
+'==          So, to go from a low to a high value means you need to go counter clockwise (CC)
+'===========================================
+CrabOrientAdjust:
+
+'Handle any orientation (theta) adjustments from a crab standpoint.  This call will adjust
+'  the r/lcrab_targets to change the orientation of the robot.
+
+'Try not to change the value of the right target since that currently has the key autonomous
+'  wheel which is correctly aimed at the waypoint target.  So, instead change the left wheels
+'  target to cause the orientation change.
+
+'If driving tword the left side of the robot then moving the left wheels more Clockwise(CW) than 
+' the right will cause the robot to rotate CW also.
+GET s_lf_wheel, tmp1      'get intended wheel speed...direction of wheel spin 
+GET s_lcrab_target, tmp2  'get intended wheel crab direction
+GET s_curr_orient, tmp3   'current compass value (or theta) of the robot
+GET s_target_orient, tmp4 'target compass value of the robot
+
+'Figure out how far we currently are from the target
+if(tmp3 > tmp4) then
+   'target is farther CC than current...need to rotation CC
+   tmp5 = tmp3 - tmp4   ' tmp5 = distance from target
+   tmp3.bit0 = CC_ROTATION_NEEDED 
+'   debug "CC-"
+else
+   'target is farther CW than current...need to rotate CW
+   tmp5 = tmp4 - tmp3  ' tmp5 = distance from target
+   tmp3.bit0 = CW_ROTATION_NEEDED
+'   debug "CW-" 
+endif
+
+'If we are at or near our theta target then just get out of here...no adjustment
+if(tmp5 <= ORIENT_ADJUST_DEAD_ZONE) then CrabOrientAdjDone
+
+'If we have to turn more than 180degrees (127 brads) to get to the target we should
+' just optimize and go in the other direction to get to the target sooner;
+if(tmp5 > 127) then
+   tmp5 = 255 - tmp5         'Set dist to target to be the shorter distance to target
+   tmp3.bit0 = tmp3.bit0 ^ 1 'flip direction bit to show other direction for rotation needed (XOR 1 = NOT)
+'   debug "^"
+endif
+   
+'The amount that we want to differ the two wheels by is the distance from the target (tmp5)
+'  but it should be capped at MAX_CRAB_TARG_DIFF
+tmp5 = tmp5 MAX MAX_CRAB_TARG_DIFF
+'ToDo: NEED TO HANDLE STRAIGHT AHEAD BETTER!!!
+
+'debug "Sp1=", dec tmp1, " Cr2=", dec tmp2, " Ori3=", dec tmp3, " Tar4=", dec tmp4, " Dif5=", dec tmp5
+
+
+'tmp1 > 127 means driving forward
+'tmp2 > 127 means wheels are aimed to the left
+if((((tmp1 > 127 AND tmp2 > 127) OR (tmp1 < 127 AND tmp2 < 127)) AND (tmp3.bit0 = CW_ROTATION_NEEDED)) OR  (((tmp1 > 127 AND tmp2 < 127) OR (tmp1 < 127 AND tmp2 > 127)) AND (tmp3.bit0 = CC_ROTATION_NEEDED))    ) then 
+   '((Wheels driving forward AND aimed tword left of the robot)   OR
+   ' (Wheels driving backward AND aimed tword right of the robot) AND (we need to rotate CW tword target)
+   ' - OR -  (Opposite of above, but wanting to rotate CC)
+   '((Wheels driving backward AND aimed tword right of the robot) OR
+   ' (Wheels driving forward  AND aimed tword left of the robot)     ) AND (we need to rotate CC tword target)
+
+   'In this case, the left wheels are "leading" the robot and we need to rotate CW tword target OR
+   '  the left wheels are "trailing" the robot, and we need to rotate CC tword target.
+   '  handled here...aiming left wheels more CW than right will cause correct rotation of the robot.
+
+   GET s_lcrab_target, tmp2                   'get intended wheel crab direction
+   tmp2 = ((tmp2 + tmp5) MAX 255)
+'   debug " 1st=", dec tmp2, CR 
+   PUT s_lcrab_target, tmp2 'decrease (more CW) lcrab target for CW rotation (no wrap around...MIN)
+else
+   'In this case, the left wheels are "leading" the robot and we need to rotate CC tword target OR
+   '  the left wheels are "trailing" the robot, and we need to rotate CW tword target.
+
+   '  Aiming the left wheels more CC than the right will cause CW rotation of the robot.
+   GET s_lcrab_target, tmp2                    'get intended wheel crab direction
+   tmp2 = ((127 + tmp2 - tmp5) MIN 127) - 127 'The 127 + ... - 127 avoids negative numbers			
+'   debug " 2st=", dec tmp2, CR 
+   PUT s_lcrab_target, tmp2 'decrease (more CW) lcrab target for CC rotation  (no wrap around...MIN)
+endif
+
+GET s_rcrab_target, tmp1
+GET s_lcrab_target, tmp2
+'debug " R=", dec tmp1, " L(new)=", dec tmp2, CR
+
+CrabOrientAdjDone:
+
+return 'from CrabOrientAdjust
+
+'============================================
+'========= CrabScaling Subroutine ===========
+'== Inputs:  tmp1 - target (in binary degrees) of crab modules
+'==          tmp2 - Crab Left constant
+'==          tmp3 - Crab Right constant
+'== Outputs: tmp1 - target (in pot values) of crab modules
+'== Modifys:
+'== Purpose: convert from binary degrees to pot values
+'============================================
+CrabScaling:
+
+'scale so full 0-255 binary degree range maps to pot range
+if (tmp1 >= 127) then
+   tmp1 = 127 + ((tmp1 - 127) * (tmp2 - 127) / 128)
+else
+   tmp1 = 127 - ((127 - tmp1) * (127 - tmp3) / 128)
+endif
+
+return 'from CrabScaling
+
+'=============================================
+'========= CrabFeedback Subroutine ===========
+'== Inputs:  tmp1 - pot value
+'==          tmp3 - crab target
+'== Outputs: tmp2 - crab motor speed
+'== Modifys: tmp2
+'== Purpose: turn the crab motors towards the target
+'=============================================
+CrabFeedbackLeft:
+
+if (tmp3 > tmp1) then fb_left_crab_left
+if (tmp3 < tmp1) then fb_left_crab_right
+tmp2 = 127
+goto fb_left_crab_done
+
+'Make wheel speed proportional to distance from target
+fb_left_crab_left:
+   select (tmp3 - tmp1)
+      case < CRAB_POSITION_NEAR_LEFT
+         tmp2 = 127
+      case < CRAB_POSITION_CLOSE_LEFT
+         tmp2 = 127+CRAB_SLOW_LEFT
+      case < CRAB_POSITION_FAR_LEFT
+         tmp2 = 127+CRAB_MED_LEFT
+      case else
+         tmp2 = 127+CRAB_FAST_LEFT
+   endselect
+goto fb_left_crab_done
+
+fb_left_crab_right:
+   select (tmp1 - tmp3)
+      case < CRAB_POSITION_NEAR_LEFT
+         tmp2 = 127
+      case < CRAB_POSITION_CLOSE_LEFT
+         tmp2 = 127-CRAB_SLOW_LEFT
+      case < CRAB_POSITION_FAR_LEFT
+         tmp2 = 127-CRAB_MED_LEFT
+      case else
+         tmp2 = 127-CRAB_FAST_LEFT
+   endselect
+goto fb_left_crab_done
+
+fb_left_crab_done:
+
+return 'from CrabFeedbackLeft
+
+
+
+CrabFeedbackRight:
+
+if (tmp3 > tmp1) then fb_right_crab_left
+if (tmp3 < tmp1) then fb_right_crab_right
+tmp2 = 127
+goto fb_right_crab_done
+
+'Make wheel speed proportional to distance from target
+fb_right_crab_left:
+   select (tmp3 - tmp1)
+      case < CRAB_POSITION_NEAR_RIGHT
+         tmp2 = 127
+      case < CRAB_POSITION_CLOSE_RIGHT
+         tmp2 = 127+CRAB_SLOW_RIGHT
+      case < CRAB_POSITION_FAR_RIGHT
+         tmp2 = 127+CRAB_MED_RIGHT
+      case else
+         tmp2 = 127+CRAB_FAST_RIGHT
+   endselect
+goto fb_right_crab_done
+
+fb_right_crab_right:
+   select (tmp1 - tmp3)
+      case < CRAB_POSITION_NEAR_RIGHT
+         tmp2 = 127
+      case < CRAB_POSITION_CLOSE_RIGHT
+         tmp2 = 127-CRAB_SLOW_RIGHT
+      case < CRAB_POSITION_FAR_RIGHT
+         tmp2 = 127-CRAB_MED_RIGHT
+      case else
+         tmp2 = 127-CRAB_FAST_RIGHT
+   endselect
+goto fb_right_crab_done
+
+fb_right_crab_done:
+
+return 'from CrabFeedbackRight
+

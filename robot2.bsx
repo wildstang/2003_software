@@ -1,0 +1,1742 @@
+' {$PBASIC 2.5}
+' {$STAMP BS2sx}
+
+
+
+'=============================================================================================================
+'========== CONDITIONAL COMPILATION ==========================================================================
+'=============================================================================================================
+' To prevent code from being compiled simply comment out the #DEFINE line
+'#DEFINE TWITCH_DEBUG
+'#DEFINE TWITCH_TEST
+
+#DEFINE COMPETITION_ROBOT
+#DEFINE COMPETITION_BUTTON_BOX
+
+'=============================================================================================================
+'========== DECLARE VARIABLES ================================================================================
+'=============================================================================================================
+'  Below is a list of declared input and output variables.  Comment or un-comment
+'  the variables as needed.  Declare any additional variables required in
+'  your main program loop.  Note that you may only use 26 total variables.
+
+'---------- Misc. MUST BE THE FIRST VARIABLES IN ALL BANKS ---------------------------------------------------
+'------PERSISTENT VARIABLES -- VALID IN ALL BANKS ------------------------------------------------------------
+'NOTE:In order for these variables to be valid in ALL banks, they must be in the exact same spot in each bank.
+'     To do this, just always keep these as the first variables in each bank.
+'packet_num	VAR byte
+'delta_t	VAR byte
+
+'---------- Aliases for the Pbasic Mode Byte (nvr_PB_mode) -------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Bit 7 of the nvr_PB_mode byte (aliased as comp_mode below) indicates the status
+'  of the Competition Control, either Enabled or Disabled.  This indicates the
+'  starting and stopping of rounds at the competitions.
+'  Comp_mode is indicated by a solid "Disabled" LED on the Operator Interface.
+'  Comp_mode = 1 for Enabled, 0 for Disabled.
+'
+'  Bit 6 of the nvr_PB_mode byte (aliased as auton_mode below) indicates the status
+'  of the Autonomous Mode, either Autonomous or Normal.  This indicates when
+'  the robot must run on its own programming.  When in Autonomous Mode, all
+'  OI analog inputs are set to 127 and all OI switch inputs are set to 0 (zero).
+'  Auton_mode is indicated by a blinking "Disabled" LED on the Operator Interface.
+'  Auton_mode = 1 for Autonomous, 0 for Normal.
+'
+'  Autonomous Mode can be turned ON by setting the RC to Team 0 (zero).
+
+'
+'  Bit 5 of the nvr_PB_mode byte (aliased as user_display_mode below) indicates when
+'  the user selects the "User Mode" on the OI.  nvr_PB_mode.bit5 is set to 1 in "User Mode".
+'  When the user selects channel, team number, or voltage, nvr_PB_mode.bit5 is set to 0
+'  When in "User Mode", the eight Robot Feedback LED are turned OFF.
+'  Note: "User Mode" is identified by the letter u in the left digit (for 4 digit OI's)
+'  Note: "User Mode" is identified by decimal places on the right two digits (for 3 digit OI's)
+nvr_PB_mode                    VAR byte
+nvr_PB_mode__comp_mode         VAR nvr_PB_mode.bit7
+nvr_PB_mode__auton_mode        VAR nvr_PB_mode.bit6
+nvr_PB_mode__user_display_mode VAR nvr_PB_mode.bit5 
+
+nvr_manybits                   VAR byte
+nvr_manybits__twitchdone       VAR nvr_manybits.bit0
+nvr_manybits__crab_broken      VAR nvr_manybits.bit1
+nvr_manybits__first_loop       VAR nvr_manybits.bit2
+nvr_manybits__first_auto_loop  VAR nvr_manybits.bit3
+nvr_manybits__prev_loop_ctr    VAR nvr_manybits.bit4
+nvr_manybits__prev_loop_dir    VAR nvr_manybits.bit5
+nvr_manybits__fwing_brake      VAR nvr_manybits.bit6
+nvr_manybits__bwing_brake      VAR nvr_manybits.bit7
+
+'---------- Operator Interface (OI) - Analog Inputs ----------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+p1_x		VAR byte	'Port 1, X-axis on Joystick
+pwm5		VAR p1_x
+tmp1            VAR p1_x
+
+'p2_x		VAR byte	'Port 2, X-axis on Joystick
+
+p3_x		VAR byte	'Port 3, X-axis on Joystick
+pwm7		VAR p3_x
+tmp3            VAR p3_x
+
+p4_x		VAR byte	'Port 4, X-axis on Joystick
+pwm8		VAR p4_x
+tmp4            VAR p4_x
+
+p1_y		VAR byte	'Port 1, Y-axis on Joystick
+pwm1		VAR p1_y
+
+'p2_y		VAR byte	'Port 2, Y-axis on Joystick
+
+p3_y		VAR byte	'Port 3, Y-axis on Joystick
+pwm3		VAR p3_y
+
+p4_y		VAR byte	'Port 4, Y-axis on Joystick
+pwm4		VAR p4_y
+
+p1_wheel	VAR byte	'Port 1, Wheel on Joystick
+pwm9		VAR p1_wheel
+
+p2_wheel	VAR byte	'Port 2, Wheel on Joystick
+pwm10		VAR p2_wheel
+
+'p3_wheel	VAR byte	'Port 3, Wheel on Joystick
+'pwm11		VAR p3_wheel
+
+p4_wheel	VAR byte	'Port 4, Wheel on Joystick
+pwm6		VAR p4_wheel
+tmp2            VAR p4_wheel
+
+'p1_aux		VAR byte	'Port 1, Aux on Joystick
+pwm12           VAR byte
+
+'p2_aux		VAR byte	'Port 2, Aux on Joystick
+pwm13           VAR byte
+
+'p3_aux		VAR byte	'Port 3, Aux on Joystick
+
+p4_aux		VAR byte	'Port 4, Aux on Joystick
+pwm2		VAR p4_aux
+
+
+
+
+'---------- Operator Interface - Digital Inputs --------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+oi_swA		VAR byte	'OI Digital Switch Inputs 1 thru 8
+oi_swB		VAR byte	'OI Digital Switch Inputs 9 thru 16
+
+
+'---------- Robot Controller (RC) - Analog Inputs ------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+sensor1	VAR byte	'RC Analog Input 1, connector pin 2
+sensor2	VAR byte	'RC Analog Input 2, connector pin 16
+sensor3	VAR byte	'RC Analog Input 3, connector pin 5
+sensor4	VAR byte	'RC Analog Input 4, connector pin 19
+sensor5	VAR byte	'RC Analog Input 5, connector pin 8
+'sensor6	VAR byte	'RC Analog Input 6, connector pin 22
+'sensor7	VAR byte	'RC Analog Input 7, connector pin 11
+bat_volt	VAR byte	'RC Analog Input 8, hardwired to the Battery
+				'Vin = ((4.7/14.7)* Battery voltage)-0.4
+				'Binary Battery Voltage = (Vin/5.0 V)*255
+
+
+'---------- Robot Controller - Digital Inputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+rc_swA		VAR byte	'RC Digital Inputs 1 thru 8
+'rc_swB		VAR byte	'RC Digital Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Outputs ---------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+relayA		VAR byte
+relayB		VAR byte
+
+'---------- Temporary Variables ------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+tmp5            VAR byte
+
+'Keep track of the the user_mode bit (RC request to see user data instead of LEDs) 
+tmp5_manybits2__force_auto     VAR tmp5.bit0    'User requested robot to run auto regardless of auton bit from OI 
+tmp5_manybits2__prev_user_mode VAR tmp5.bit1    'Previous loop value of the PBMode.user_mode
+tmp5_manybits2__many2          VAR tmp5.bit2
+tmp5_manybits2__many3          VAR tmp5.bit3
+tmp5_manybits2__loop_cnt       VAR tmp5.HIGHNIB 'Keep loop count...incrememnted each loop
+
+
+'THESE MUST MATCH WITH robot3/3A ALSO
+waypoint_tmp5            VAR tmp5
+waypoint_tmp5__side      VAR waypoint_tmp5.BIT7     'Top bit indicates side of the field
+waypoint_tmp5__prog_side VAR waypoint_tmp5.HIGHNIB  'Program number combined with side is the program to run
+waypoint_tmp5__idx       VAR waypoint_tmp5.LOWNIB   'Bottom 4 bits are the current waypoint index we are at
+WAYPOINT_PROG_ONLY_MASK CON %0111   'ANDing prog_side with this will return prog only (mask off "side"...bit7)
+
+
+'=============================================================================================================
+'========== DEFINE ALIASES ===================================================================================
+'=============================================================================================================
+'  Aliases are variables which are sub-divisions of variables defined
+'  above.  Aliases don't require any additional RAM.
+
+
+'---------- Aliases for each OI switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Operator Interface.
+'  Ports 1 & 3 have their inputs duplicated in ports 4 & 2 respectively.  The 
+'  inputs from ports 1 & 3 may be disabled via the 'Disable' dip switch 
+'  located on the Operator Interface.  See Users Manual for details.
+
+fwing_up_sw	VAR oi_swA.bit0	'p1_sw_trig
+fwing_dn_sw	VAR oi_swA.bit1	'p1_sw_top
+bwing_up_sw	VAR oi_swA.bit2	'p1_sw_aux1
+bwing_dn_sw	VAR oi_swA.bit3	'p1_sw_aux2
+
+stacker_up_sw	VAR oi_swA.bit4	'p3_sw_trig
+stacker_dn_sw	VAR oi_swA.bit5	'p3_sw_top
+scraper_sw	VAR oi_swA.bit6	'p3_sw_aux1
+crab_ovr_sw	VAR oi_swA.bit7	'p3_sw_aux2
+
+wing_feedbk_sw	VAR oi_swB.bit0	'p2_sw_trig
+stack_feedbk_sw	VAR oi_swB.bit1	'p2_sw_top
+p2_sw_aux1	VAR oi_swB.bit2	'p2_sw_aux1
+p2_sw_aux2	VAR oi_swB.bit3	'p2_sw_aux2
+
+crab_trig	VAR oi_swB.bit4	'p4_sw_trig
+crab_top	VAR oi_swB.bit5	'p4_sw_top
+drive_trig	VAR oi_swB.bit6	'p4_sw_aux1
+drive_top	VAR oi_swB.bit7	'p4_sw_aux2
+
+
+'---------- Aliases for each RC switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Robot Controller.
+
+rc_sw1		VAR rc_swA.bit0
+rc_sw2		VAR rc_swA.bit1
+rc_sw3		VAR rc_swA.bit2
+rc_sw4		VAR rc_swA.bit3
+rc_sw5		VAR rc_swA.bit4
+rc_sw6		VAR rc_swA.bit5
+rc_sw7		VAR rc_swA.bit6
+rc_sw8		VAR rc_swA.bit7
+
+'---------- Aliases for each RC Relay outputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the relay outputs located on the Robot Controller.
+
+relay1_fwd	VAR relayA.bit0
+relay1_rev	VAR relayA.bit1
+relay2_fwd	VAR relayA.bit2
+relay2_rev	VAR relayA.bit3
+relay3_fwd	VAR relayA.bit4
+relay3_rev	VAR relayA.bit5
+relay4_fwd	VAR relayA.bit6
+relay4_rev	VAR relayA.bit7
+
+relay5_fwd	VAR relayB.bit0
+relay5_rev	VAR relayB.bit1
+relay6_fwd	VAR relayB.bit2
+relay6_rev	VAR relayB.bit3
+relay7_fwd	VAR relayB.bit4
+relay7_rev	VAR relayB.bit5
+relay8_fwd	VAR relayB.bit6
+relay8_rev	VAR relayB.bit7
+
+'=============================================================================
+'SHARED Constants (these are used by more than one bank and MUST AGREE in each) 
+TRUE		CON 1
+FALSE		CON 0
+
+'=============================================================================
+'Constants for Scratchpad ram locations [0-62] (63 reserved)
+'(these constants are shared and must agree in all banks) 
+
+'(I just reserved these in the order they come in the serin stream)
+
+s_oi_swA	CON	0
+s_oi_swB	CON	1
+s_rc_swA	CON	2
+s_drive_x       CON     3
+s_drive_y       CON     4
+s_crab_x        CON     5
+s_crab_y        CON     6
+s_fwing_oi      CON     7
+s_bwing_oi      CON     8
+s_stacker_oi    CON     9
+s_manybits2	CON	10  'additional status bits
+'s_packet_num 	CON	11
+s_lcrab_pot	CON	12	'left crab pot
+s_rcrab_pot	CON	13	'right crab pot
+
+s_fwing_pot	CON	15	'front wing pot
+s_bwing_pot	CON	16	'back wing pot
+
+'s_p3_y		CON	17
+s_stacker_pot	CON	18	'stacker pot
+'s_sensor6	CON	19
+'s_p1_wheel	CON	21
+'s_sensor7	CON	22
+'(...end of possible serin inputs.  continue now, with outputs and stored user variables.) 
+
+s_stacker_tgt   CON     25
+'s_waypoint_sel  CON     26
+'s_waypoint_flgs CON     27   'flags associated with waypoint
+
+s_curr_pos_x	CON	32
+s_curr_pos_y	CON	33
+s_curr_orient	CON	34   'current compass value (or theta) of the robot
+s_target_orient CON     35   'target compass value of the robot
+
+s_fwing_wp_tgt  CON     36
+s_bwing_wp_tgt  CON     37
+
+s_waypoint 	CON	38
+s_target_heading CON	39
+
+s_relayA	CON	40
+s_relayB	CON	41
+
+s_fwing_tgt	CON	42
+s_bwing_tgt	CON	43
+
+s_rcrab_target	CON	44
+s_lcrab_target	CON	45
+s_right_crab	CON	46  'crab steering motor speed
+s_left_crab	CON	47
+s_rcrab_init	CON	48
+s_lcrab_init	CON	49
+
+s_lf_cur	CON	50  'current speed of drive wheels
+s_rf_cur	CON	51
+s_lb_cur	CON	52
+s_rb_cur	CON	53
+
+s_lf_wheel	CON	54  'stored value for left_wheel 
+s_rf_wheel	CON	55
+s_lb_wheel	CON	56
+s_rb_wheel	CON	57
+
+s_front_wing	CON	58  'current speed of wings
+s_back_wing	CON	59
+s_stacker       CON     60  'current speed of stacker
+
+s_bat_volt	CON	62
+s_banknumber	CON	63  'Read-Only
+
+' ...insert any other storage names up to 62 that are useful... 
+
+
+
+'      ____ ___  _   _ ____ _____  _    _   _ _____ ____
+'     / ___/ _ \| \ | / ___|_   _|/ \  | \ | |_   _/ ___|
+'    | |  | | | |  \| \___ \ | | / _ \ |  \| | | | \___ \
+'    | |__| |_| | |\  |___) || |/ ___ \| |\  | | |  ___) |
+'     \____\___/|_| \_|____/ |_/_/   \_\_| \_| |_| |____/
+
+
+'Bank Constants (only used in this bank)
+ANALOG_TO_BUTTON_HIGH   CON     200 'threshold for analog buttons
+TRIM_ZONE               CON     1
+
+TWITCH_THRESHOLD        CON     5   'distance pots must rotate to pass twitch test
+
+'--- Wings
+WING_TURBO_UP           CON     126 'must be < 127
+WING_FAST_UP            CON     126 'was 30  'must be < 127
+WING_MED_UP             CON     25
+WING_SLOW_UP            CON     20
+
+WING_TURBO_DOWN         CON     126
+WING_FAST_DOWN          CON     50  'must be < 127
+WING_MED_DOWN           CON     20
+WING_SLOW_DOWN          CON     15
+
+WING_MANU_SPEED_DN      CON     20
+WING_MANU_SPEED_UP      CON     20
+WING_POSITION_NEAR      CON     4
+WING_POSITION_CLOSE     CON     15
+WING_POSITION_FAR       CON     30
+
+#IF COMPETITION_ROBOT #THEN
+'=================Competition ROBOT=========
+'--- Back wing
+BWING_POT_0_DEG         CON     215   '0 Degrees is full up
+BWING_POT_90_DEG        CON     124   '90 Degrees is straight out
+BWING_POT_FULL_DN       CON     79    'Full down when on top of the ramp
+
+FWING_POT_0_DEG         CON     186   '0 Degrees is full up
+FWING_POT_90_DEG        CON     94    '90 Degrees is straight out
+FWING_POT_FULL_DN       CON     53    'Full down when on top of the ramp
+
+BWING_BRAKE_ENGAGED_PWM     CON     127  'PWM value to engage the back brake
+BWING_BRAKE_DISENGAGED_PWM  CON     0    'PWM value to disengage the back brake
+FWING_BRAKE_ENGAGED_PWM     CON     127  'PWM value to engage the front brake
+FWING_BRAKE_DISENGAGED_PWM  CON     0    'PWM value to disengage the front brake
+#ELSE
+'=================Proto ROBOT===============
+'--- Back wing
+BWING_POT_0_DEG         CON     221   '0 Degrees is full up
+BWING_POT_90_DEG        CON     138   '90 Degrees is straight out
+BWING_POT_FULL_DN       CON     84    'Full down when on top of the ramp
+
+FWING_POT_0_DEG         CON     180   '0 Degrees is full up
+FWING_POT_90_DEG        CON     96    '90 Degrees is straight out
+FWING_POT_FULL_DN       CON     44    'Full down when on top of the ramp
+
+BWING_BRAKE_ENGAGED_PWM     CON     127  'PWM value to engage the back brake
+BWING_BRAKE_DISENGAGED_PWM  CON     254  'PWM value to disengage the back brake
+FWING_BRAKE_ENGAGED_PWM     CON     127  'PWM value to engage the front brake
+FWING_BRAKE_DISENGAGED_PWM  CON     0    'PWM value to disengage the front brake
+'===========================================
+#ENDIF
+
+'There should be no need to change these ever...they are just the values for full
+'  up and down that can be programmed into the autonomous waypoints.  All OI values
+'  are scaled to these and then the intermediate values is scaled to the pot values.
+WING_DEG_0_DEG          CON     0     'Intermediate Target value for 0 degrees (full up)
+WING_DEG_90_DEG         CON     90    'Intermediate Target value for 90 degrees
+WING_DEG_FULL_DN        CON     135   'Intermediate Target value for full down 
+
+WING_DEG_TOP_DIFF       CON     WING_DEG_90_DEG - WING_DEG_0_DEG
+WING_DEG_BOTTOM_DIFF    CON     WING_DEG_FULL_DN - WING_DEG_90_DEG
+WING_DEG_DIFF           CON     WING_DEG_FULL_DN - WING_DEG_0_DEG
+
+WING_BRAKE_ENGAGED_FLAG      CON     1    'Flag to show brake needs to be engaged
+WING_BRAKE_DISENGAGED_FLAG   CON     0    'Flag to show brake needs to be disengaged
+
+#IF COMPETITION_BUTTON_BOX #THEN
+'=================Competition Button Box=========
+'--- Back wing
+BWING_OI_0_DEG          CON     185
+BWING_OI_90_DEG         CON     100
+BWING_OI_FULL_DN        CON     67
+
+'--- Front wing
+FWING_OI_0_DEG          CON     170
+FWING_OI_90_DEG         CON     83
+FWING_OI_FULL_DN        CON     41
+#ELSE
+'=================Proto Button Box===============
+'--- Back wing
+BWING_OI_0_DEG          CON     182
+BWING_OI_90_DEG         CON     99
+BWING_OI_FULL_DN        CON     61
+
+'--- Front wing
+FWING_OI_0_DEG          CON     191
+FWING_OI_90_DEG         CON     114
+FWING_OI_FULL_DN        CON     87
+'================================================
+#ENDIF
+
+BWING_OI_TOP_DIFF       CON     BWING_OI_0_DEG - BWING_OI_90_DEG
+BWING_OI_BOTTOM_DIFF    CON     BWING_OI_90_DEG - BWING_OI_FULL_DN
+BWING_OI_FULL_DIFF      CON     BWING_OI_0_DEG - BWING_OI_FULL_DN
+
+FWING_OI_TOP_DIFF       CON     FWING_OI_0_DEG - FWING_OI_90_DEG
+FWING_OI_BOTTOM_DIFF    CON     FWING_OI_90_DEG - FWING_OI_FULL_DN
+FWING_OI_DIFF           CON     FWING_OI_0_DEG - FWING_OI_FULL_DN
+
+
+'--- Stacker
+STACKER_MANU_SPEED_DN   CON     45
+STACKER_MANU_SPEED_UP   CON     120
+
+STACKER_OI_MIN          CON     6
+STACKER_OI_MAX          CON     254
+STACKER_OI_DIFF         CON     STACKER_OI_MAX - STACKER_OI_MIN
+
+STACKER_POT_MIN_POS     CON     55
+STACKER_POT_BIN_GRAB    CON     64
+STACKER_POT_BIN_RELEASE CON     149
+
+STACKER_POT_MAX_POS     CON     160
+STACKER_POT_DIFF        CON     STACKER_POT_BIN_RELEASE - STACKER_POT_BIN_GRAB
+
+STACKER_UP_FAST         CON     127 'must be < 127
+STACKER_UP_MED          CON     55
+STACKER_UP_SLOW         CON     30
+STACKER_DOWN_FAST       CON     75  'must be < 127
+STACKER_DOWN_MED        CON     20
+STACKER_DOWN_SLOW       CON     15
+STACKER_POSITION_NEAR   CON     4
+STACKER_POSITION_CLOSE  CON     10
+STACKER_POSITION_FAR    CON     15
+
+
+
+'---- Starting points for robot
+'WARNING...MUST CHANGE THIS DEFINE IN robot3 ALSO
+WAYPOINT_RIGHT_SIDE     CON     0   'Must be a bit
+WAYPOINT_LEFT_SIDE      CON     1
+
+STARTING_RIGHT_POS_X    CON     69
+STARTING_RIGHT_POS_Y    CON     63    '128" from center of ramp(127)
+STARTING_RIGHT_ORIENT   CON     0
+STARTING_LEFT_POS_X     CON     69
+STARTING_LEFT_POS_Y     CON     178   '154" from center of ramp(127)
+STARTING_LEFT_ORIENT    CON     0
+
+STARTING_RIGHT_ORIENT_90 CON    64    'When started in 90 degree orientation for sideways stack hit, use this
+STARTING_LEFT_ORIENT_90  CON    64
+
+#IF COMPETITION_BUTTON_BOX #THEN
+'=================Competition Button Box=========
+  'Settings on the pot on the OI that pick between programs
+  WAYPOINT_OI_SEL0        CON     4   'matches 'diff' define to cover 0
+  WAYPOINT_OI_SEL1        CON     17
+  WAYPOINT_OI_SEL2        CON     42
+  WAYPOINT_OI_SEL3        CON     65
+  WAYPOINT_OI_SEL4        CON     88
+  WAYPOINT_OI_SEL5        CON     112
+  WAYPOINT_OI_SEL6        CON     134
+  WAYPOINT_OI_SEL7        CON     158
+  WAYPOINT_OI_SEL8        CON     181
+  WAYPOINT_OI_SEL9        CON     205
+  WAYPOINT_OI_SEL10       CON     229
+  WAYPOINT_OI_DIFF        CON     4
+#ELSE
+'=================Proto Button Box===============
+  'Settings on the pot on the OI that pick between programs
+  WAYPOINT_OI_SEL0        CON     4
+  WAYPOINT_OI_SEL1        CON     26
+  WAYPOINT_OI_SEL2        CON     49
+  WAYPOINT_OI_SEL3        CON     72
+  WAYPOINT_OI_SEL4        CON     94
+  WAYPOINT_OI_SEL5        CON     117
+  WAYPOINT_OI_SEL6        CON     139
+  WAYPOINT_OI_SEL7        CON     161
+  WAYPOINT_OI_SEL8        CON     184
+  WAYPOINT_OI_SEL9        CON     206
+  WAYPOINT_OI_SEL10       CON     230
+  WAYPOINT_OI_DIFF        CON     4
+#ENDIF
+
+'Remember, left side sets the highest bit of list num (ends up adding 32 to list)
+'THESE MUST MATCH WITH robot3 ALSO
+AUTO_LIST0              CON     0   '0 for right, 8 for left side
+AUTO_LIST1              CON     1   '1 for right, 9 for left side
+AUTO_LIST2              CON     2   '2 for right, 10 for left side
+AUTO_LIST3              CON     3   '3 for right, 11 for left side
+AUTO_LIST4              CON     4   '4 for right, 12 for left side
+AUTO_LIST5              CON     5   '5 for right, 13 for left side
+AUTO_LIST6              CON     6   '6 for right, 14 for left side
+'AUTO_LIST7              CON     7   '7 for right, 15 for left side
+'AUTO_LIST8              CON     8   '8 for right, 16 for left side
+'AUTO_LIST9              CON     9   '9 for right, 17 for left side
+'AUTO_LIST10             CON     10  '10 for right,18 for left side
+AUTO_LIST_INVALID       CON     7   '7 and 15 equate to invalid list number
+
+'Going higher than this value on the crab stick will clear the force auton bit
+Y_VALUE_TO_STOP_FORCE_AUTON  CON 170
+
+'WARNING, THIS MUST MATCH UP WITH THE DEFINE IN robot3...CHANGE IN robot3 also
+DEFAULT_WAYPOINT_IDX            CON     $F  'Default waypoint index...indicates RC doesn't know the waypoint
+                                            ' and needs to ask the CC sice this means the RC has reset.
+
+'loop_cnt will go from 0 to this number.  This can be used to do something special
+'  based on the current loop...like sending back certain data back to the Palm
+LOOP_COUNT_MAX          CON     5
+
+'------------------RC To CC Communication Information...In robot3.bsx also -----------------
+CC_CMD_SET_POSITION     CON 120  'Command byte sent to CC to set X,Y,theta on the CC if it reset
+CC_CMD_SET_PROG_SIDE    CON 190  'Command byte sent to CC to set our program number and side
+CC_OUTBAUD              CON 240
+CC_INBAUD               CON 240
+
+
+'=============================================================================================================
+'========== DEFINE CONSTANTS (DO NOT CHANGE) =================================================================
+'=============================================================================================================
+' Baud rate for communications with User CPU
+OUTBAUD				CON 	20	'(62500, 8N1, Noninverted)
+INBAUD				CON 	20	'(62500, 8N1, Noninverted)
+
+USERCPU				CON 	4
+FPIN				CON 	1
+COMA				CON 	1
+COMB				CON 	2
+COMC				CON 	3
+
+
+
+'=============================================================================================================
+'========== MAIN DO LOOP =====================================================================================
+'=============================================================================================================
+
+'---------- Blink BASIC RUN LED ---------------
+Toggle 7	'Basic Run LED on the RC is toggled ON/OFF every loop.
+
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+
+GET s_fwing_tgt, tmp1
+'debug "Auto=", dec nvr_PB_mode__auton_mode, "WTrg8=", dec tmp1, " " 
+
+if (nvr_PB_mode__auton_mode = 0) then
+#IF TWITCH_TEST #THEN
+   Gosub TwitchTest
+#ENDIF
+endif
+
+Gosub WriteOutputs
+Gosub ReadInputs
+
+'Increment the loop count...if count goes past MAX+1 then reset it back to 0.
+'  This may be a waste if MAX is the MAX number that loop_cnt can hold
+GET s_manybits2,tmp5
+tmp5_manybits2__loop_cnt=tmp5_manybits2__loop_cnt+1
+if(tmp5_manybits2__loop_cnt=(LOOP_COUNT_MAX+1)) then
+  tmp5_manybits2__loop_cnt=0        
+endif
+PUT s_manybits2,tmp5
+
+if (nvr_manybits__first_loop = 1 or nvr_PB_mode__user_display_mode = 0) then
+   'On the first loop (or when not in user display mode) we need to decode the selector knob and also the 
+   '  side selector switch.  Setting to user_display_mode will lock in the data.
+
+   GET s_waypoint, tmp5
+
+   'First decode the waypoint selector knob to a waypoint list
+   'ASSUMES p2_wheel is unchanged from ReadInputs
+   select (p2_wheel)
+      case (WAYPOINT_OI_SEL0 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL0 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST0
+      case (WAYPOINT_OI_SEL1 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL1 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST1
+      case (WAYPOINT_OI_SEL2 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL2 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST2
+      case (WAYPOINT_OI_SEL3 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL3 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST3
+      case (WAYPOINT_OI_SEL4 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL4 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST4
+      case (WAYPOINT_OI_SEL5 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL5 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST5
+      case (WAYPOINT_OI_SEL6 - WAYPOINT_OI_DIFF) TO (WAYPOINT_OI_SEL6 + WAYPOINT_OI_DIFF)
+         waypoint_tmp5__prog_side=AUTO_LIST6
+      case else
+         waypoint_tmp5__prog_side=AUTO_LIST_INVALID
+   endselect
+
+   'debug "Wheel=", dec p2_wheel, " Prog=", dec waypoint_tmp5__prog_side
+
+   GET s_rc_swA, rc_swA
+
+   'Then set the side bit of the prog_side variable to indicate which side of the field
+   ' is being used.  Now, prog_side is a unique variable that picks a list that is specific
+   ' to the program number and to the side of the field.
+   'IMPORTANT...__side is a bit in __prog_side so it should be set after __prog_side
+   if (rc_sw2 = WAYPOINT_RIGHT_SIDE) then
+      waypoint_tmp5__side = WAYPOINT_RIGHT_SIDE
+      PUT s_curr_pos_x, STARTING_RIGHT_POS_X
+      PUT s_curr_pos_y, STARTING_RIGHT_POS_Y
+'      if(waypoint_tmp5__prog_side&WAYPOINT_PROG_ONLY_MASK = AUTO_LIST3) then
+'         PUT s_curr_orient, STARTING_RIGHT_ORIENT_90
+'      else
+         PUT s_curr_orient, STARTING_RIGHT_ORIENT
+'      endif
+   else
+      waypoint_tmp5__side = WAYPOINT_LEFT_SIDE
+      PUT s_curr_pos_x, STARTING_LEFT_POS_X
+      PUT s_curr_pos_y, STARTING_LEFT_POS_Y
+'      if(waypoint_tmp5__prog_side&WAYPOINT_PROG_ONLY_MASK = AUTO_LIST3) then
+'         PUT s_curr_orient, STARTING_LEFT_ORIENT_90
+'      else
+         PUT s_curr_orient, STARTING_LEFT_ORIENT
+'      endif
+   endif
+
+   'Always send the current position to the CC when not in user mode so we properly initialize theta if the program selector knob changes
+   GET s_curr_pos_x, tmp1
+   GET s_curr_pos_y, tmp2
+   GET s_curr_orient, tmp3
+   Serout 16, CC_OUTBAUD, [CC_CMD_SET_POSITION, tmp1, tmp2, tmp3]
+
+   'Set waypoint index to invalid so we will ask the CC for our current index
+   waypoint_tmp5__idx = DEFAULT_WAYPOINT_IDX
+
+'   debug " Sw=", dec rc_sw2, " Side=", dec waypoint_tmp5__side
+
+   'We changed our program so we should store it down to the CC so if we reset then
+   '  the CC will be able to tell us this information.
+   Serout 16, CC_OUTBAUD, [CC_CMD_SET_PROG_SIDE, waypoint_tmp5__prog_side]
+   
+   PUT s_waypoint, tmp5
+
+endif
+
+
+Gosub RunPump
+
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+
+Gosub SkidPad
+
+if (nvr_PB_mode__auton_mode = 1) then
+   'do Autonomous stuff
+   Gosub BackWingScaling
+   Gosub BackWingControl
+   Gosub FrontWingScaling
+   Gosub FrontWingControl
+'   Gosub StackerFeedback
+else
+   'do non-Autonomous stuff
+'   if (limbo mode) then
+   'limbo
+'   PUT s_bwing_tgt, BWING_LIMBO_POS
+'   Gosub BackWingControl
+'   PUT s_fwing_tgt, FWING_LIMBO_POS
+'   Gosub FrontWingControl
+'   PUT s_stacker_tgt, STACKER_POT_MIN_POS
+'   Gosub StackerHookControl
+'   Gosub StackerFeedback
+
+    Gosub ScraperControl
+
+'   else
+      if (wing_feedbk_sw = 1) then          'feedback button for wings
+         Gosub BackWingInput
+         Gosub BackWingScaling
+         Gosub BackWingControl
+
+         Gosub FrontWingInput
+         Gosub FrontWingScaling
+         Gosub FrontWingControl
+      else
+         Gosub WingManualMode
+      endif
+
+'THE STACKER HAS LEFT THE BUILDING
+'      if (stack_feedbk_sw = 1) then         'feedback button for wings
+'         Gosub StackerInputScaling
+'         Gosub StackerHookControl
+'         Gosub StackerFeedback
+'      else
+'         Gosub StackerManualMode
+'      endif
+'   endif
+endif
+
+
+Run 2
+
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+if (nvr_PB_mode__auton_mode = 1) then
+   Run 2
+else
+   Run 3
+endif
+
+
+'===========================================
+'========= ReadInputs Subroutine ===========
+'===========================================
+ReadInputs:
+
+'---------- Serin Command - Get Data from Master uP -----------------------------------------------------
+'  Construct the "serin" command using the following rules:
+'  1) There must be one variable for every input defined in the "Define Constants for Init" section.
+'  2) The order must match the order in the EXAMPLE SERIN COMMAND below.
+'  3) The total number of all variables may not exceed 26.
+'  4) Only use one "Serin" command.
+'  5) The Serin command must occupy one line.
+'
+'  If you see a BASIC INIT ERR on the Robot Controller after programming and pressing RESET, then
+'  there is a problem with the Serin command below.  Check the number of variables.  A BASIC INIT ERR
+'  will not occur if you have the variables in the wrong order, however your code will not work correctly.
+'
+'  EXAMPLE SERIN COMMAND
+'  This example exceed the 26 variable limit and is not on one line:
+'
+'  Serin COMA\COMB, INBAUD, [oi_swA,oi_swB,rc_swA,rc_swB,p2_x,p1_x,p4_x,p3_x,PB_mode,packet_num,sensor1,
+'                            sensor2,p2_y,p1_y,sensor3,sensor4,p4_y,p3_y,sensor5,sensor6,p2_wheel,p1_wheel,
+'                            sensor7,sensor8,p4_wheel,p3_wheel,p2_aux,p1_aux,p4_aux,p3_aux,delta_t,res01]
+'
+   Serin COMA\COMB, INBAUD, [oi_swA,oi_swB,rc_swA,p1_x,p4_x,p3_x,nvr_PB_mode,sensor1,
+                             sensor2,p1_y,sensor3,sensor4,p4_y,sensor5,p2_wheel,
+                             bat_volt,p4_wheel,p4_aux]
+
+
+'Store ram vars in an un-aliased scratchpad location. This is helpful 
+'since independent subroutines may want to see the raw input data. 
+
+
+' Mappings for 2003 inputs
+'**************************************************************************************************************
+'* Analog inputs
+'* sensor1     Left crab
+'* sensor2     Right crab
+'* sensor3     Front wing
+'* sensor4     Back wing
+'* sensor5     Stacker
+'*
+'* Digital switches
+'* rc_sw1      Air pressure guage
+'* rc_sw2      Right / left autonomous selector switch
+'*
+'* Joystick Analog
+'* Input Var   Scratchpad RAM   Function
+'* p4_x        s_crab_x         Crab X
+'* p4_y        s_crab_y         Crab Y
+'* p4_wheel    s_drive_x        Drive X
+'* p4_aux      s_drive_y        Drive Y
+'*
+'* Joystick Digital
+'* Input Var   Alias            Function
+'* p4_sw_trig  crab_trig        crab stick trigger
+'* p4_sw_top   crab_top         90 degree offset
+'* p4_sw_aux1  drive_trig       Lower skid pad
+'* p4_sw_aux2  drive_top        Turbo
+'*
+'* Button Box Analog
+'* Input Var   Scratchpad RAM   Function
+'* p1_x        s_fwing_oi       Front wing presets
+'* p1_y        s_bwing_oi       Back wing presets
+'* p2_wheel    s_waypoint_sel   Waypoint selector knob
+'* p3_x        s_stacker_oi     Stacker presets
+'*
+'* Button Box Digital
+'* Input Var    Alias              Function
+'* p1_sw_trig   fwing_up_sw        Front wing up
+'* p1_sw_top    fwing_dn_sw        Front wing down
+'* p1_sw_aux1   bwing_up_sw        Back wing up
+'* p1_sw_aux2   bwing_dn_sw        Back wing down
+'* p2_sw_trig   wing_feedbk_sw     Wing feedback
+'* p2_sw_top    stack_feedbk_sw    Stacker feedback
+'* p2_sw_aux1
+'* p2_sw_aux2
+'* p3_sw_trig   stacker_up_sw      Stacker up
+'* p3_sw_top    stacker_dn_sw      Stacker down
+'* p3_sw_aux1   scraper_sw      Scraper activate/deactivate
+'* p3_sw_aux2   crab_ovr_sw        Crab manual override
+'*
+'**************************************************************************************************************
+
+PUT s_oi_swA, oi_swA
+
+GET s_manybits2, tmp5
+if(tmp5_manybits2__prev_user_mode = 0 and nvr_PB_mode__user_display_mode = 1) then
+  'Last loop user display mode was off, this loop it is on...We just entered user display mode
+  'When the drive button and top are pressed when entering user display mode we want to go to force auto mode
+  '  so that we will be in auto mode right when we are enabled.
+  if(drive_top = 1 and drive_trig = 1) then
+     'We have now entered forced auton mode
+     tmp5_manybits2__force_auto = 1
+  endif
+endif
+
+if(nvr_PB_mode__auton_mode = 1 or nvr_PB_mode__user_display_mode = 0 or p4_y > Y_VALUE_TO_STOP_FORCE_AUTON) then
+   'When in true auton mode, remove the force_auto bit so we will not be in force_auto
+   ' when auton mode finishes
+   tmp5_manybits2__force_auto = 0
+endif
+
+if(tmp5_manybits2__force_auto = 1) then
+   'When in forced auto, set auto to 1 regardless of the actual setting
+   nvr_PB_mode__auton_mode = 1
+endif
+
+'Save off current user mode so we know its value next loop
+tmp5_manybits2__prev_user_mode = nvr_PB_mode__user_display_mode
+PUT s_manybits2, tmp5 
+
+
+PUT s_oi_swB, oi_swB
+PUT s_rc_swA, rc_swA
+'PUT s_rc_swB, rc_swB
+PUT s_drive_x, p4_wheel
+PUT s_fwing_oi, p1_x
+PUT s_crab_x, p4_x
+PUT s_stacker_oi, p3_x
+'PUT s_PB_mode, PB_mode  'PB_mode is no- ew a persistent ram variable across banks.
+PUT s_lcrab_pot, sensor1
+PUT s_rcrab_pot, sensor2
+PUT s_drive_y, p4_aux
+PUT s_bwing_oi, p1_y
+PUT s_fwing_pot, sensor3
+PUT s_bwing_pot, sensor4
+PUT s_crab_y, p4_y
+'PUT s_p3_y, p3_y
+PUT s_stacker_pot, sensor5
+'PUT s_p1_wheel, p1_wheel
+'PUT s_p1_aux, p1_aux
+
+
+'only save the waypoint selector switch value in non-autonomous mode because in autonomous mode the input will go to 127
+'if (nvr_PB_mode__auton_mode = 0) then
+'   PUT s_waypoint_sel, p2_wheel
+'endif
+
+'debug "stack: ", DEC p3_x, "  u ", DEC stacker_up_sw, "   d ", DEC stacker_dn_sw, CR
+
+'debug "fwingOI: ", DEC p1_x, "  bwingOI: ", DEC p1_y, "  stack: ", DEC p3_x, CR
+'debug "fwing u ", DEC fwing_up_sw, " d ", DEC fwing_dn_sw, "  bwing u ", DEC bwing_up_sw, " d ", DEC bwing_dn_sw, CR
+'debug "stack u ", DEC stacker_up_sw, " d ", DEC stacker_dn_sw, "  scraper ", DEC scraper_sw, " crab manual ", DEC crab_ovr_sw, CR
+'debug "wing feedback ", DEC wing_feedbk_sw, " stacker feedback ", DEC stack_feedbk_sw, " p2_sw_aux1 ", DEC p2_sw_aux1, " p2_sw_aux2 ", DEC p2_sw_aux2, CR
+
+'debug "drive x", DEC p4_wheel, "  y ", DEC p4_aux, CR
+'debug "crab x ", DEC p4_x, "  y ", DEC p4_y, CR
+
+'Uncomment this to output the current values of the crab pots
+'debug " Lpot ", DEC sensor1, "  Rpot ", DEC sensor2, CR
+
+'Uncomment this to output the current values of the wing pots
+'debug " Fwing pot ", DEC sensor3, "  Bwing pot ", DEC sensor4, " Fwing oi ", DEC p1_x,  " Bwing oi " , DEC p1_y,CR
+
+'Uncomment this to output the current values of the stacker pot
+'debug " Stacker pot ", DEC sensor5, " Stacker OI=", DEC p3_x, CR
+
+'Uncomment this to output the waypoint selector knowb
+'debug " Waypoint selector ", DEC p2_wheel, "  switch ", DEC rc_sw2, CR
+
+'...add any other inputs as needed.
+
+'Output to LEDs when Drive Joysticks are centered
+' left (crab) joystick
+'GET s_crab_y, tmp5
+'if (tmp5 > 127-TRIM_ZONE) and (tmp5 < 127+TRIM_ZONE) then Out10 = 1 else Out10 = 0
+'GET s_crab_x, tmp5
+'if (tmp5 > 127-TRIM_ZONE) and (tmp5 < 127+TRIM_ZONE) then Out12 = 1 else Out12 = 0
+
+' right (drive) joystick
+'GET s_drive_y, tmp5
+'if (tmp5 > 127-TRIM_ZONE) and (tmp5 < 127+TRIM_ZONE) then Out11 = 1 else Out11 = 0
+'GET s_drive_x, tmp5
+'if (tmp5 > 127-TRIM_ZONE) and (tmp5 < 127+TRIM_ZONE) then Out13 = 1 else Out13 = 0
+
+return 'from ReadInputs
+
+
+'=============================================
+'========= WriteOutputs Subroutine ===========
+'=============================================
+WriteOutputs:
+
+' write the output vars with safe values, in case someone forgets
+' to update them from memory.
+
+'pwm1 = 127
+pwm2 = 127
+pwm3 = 127
+pwm4 = 127
+pwm5 = 127
+pwm6 = 127
+pwm7 = 127
+pwm8 = 127
+pwm9 = 127
+pwm10 = 127
+'pwm11 = 127
+pwm12 = 127
+pwm13 = 127
+'pwm14 = 127
+'pwm15 = 127
+'pwm16 = 127
+relayA = 0
+relayB = 0
+
+' Do the final output value GETs before writing to outputs. overwrite
+' the safe defaults. 
+
+' Don't map functionality to their outputs until this moment. (That
+' way if electrical changes their mind, we only need to change it here.)
+
+' Mappings for 2003 outputs
+'**************************************************************************************************************
+'* color table of relays
+'* 1 none           air pump
+'* 2 red/black      front skid plate
+'* 3 purple/black   back skid plate
+'* 4 brown/black    scraper
+'* 5 orange/black
+'* 6 yellow/black
+'* 7 grey/black
+'* 8 blue/black     light
+'*
+'* color table of pwms
+'* 1 none
+'* 2 red            front left drive
+'* 3 purple         right crab
+'* 4 brown          left crab
+'* 5 orange         front right drive
+'* 6 yellow         front wing
+'* 7 grey           back wing
+'* 8 green          back left drive
+'* 9 blue           back right drive
+'* 10 white         stacker
+'* 11 black
+'* 12               front brake
+'* 13               rear brake
+'**************************************************************************************************************
+GET s_lf_cur, pwm2
+GET s_rf_cur, pwm5
+GET s_lb_cur, pwm8
+
+GET s_rb_cur, pwm9
+
+'------TURN OFF DRIVE
+'pwm2=127
+'pwm5=127
+'pwm8=127
+'pwm9=127
+'--------------------
+
+GET s_right_crab, pwm3
+GET s_left_crab, pwm4
+
+'-------TURN OFF CRABS-----
+'debug "Pots are disabled in robot2.bsx", CR
+'pwm3 = 127
+'pwm4 = 127
+'--------------------------
+
+GET s_front_wing, pwm6
+GET s_back_wing, pwm7
+
+'-------TURN OFF WINGS-----
+'debug "Wings are disabled in robot2.bsx", CR
+#IF COMPETITION_ROBOT #THEN
+'=================Competition ROBOT
+'pwm6 = 127
+'pwm7 = 127
+#else
+'=================Proto ROBOT
+'pwm6 = 127  'front
+'pwm7 = 127  'back
+#endif
+
+'--------------------------
+
+GET s_stacker, pwm10
+
+'-------TURN OFF STACKER-----
+'debug "Stacker is disabled in robot2.bsx", CR
+'pwm10 = 127
+'--------------------------
+
+GET s_relayA, relayA
+GET s_relayB, relayB
+
+'-------Wing Brakes
+'GET s_manybits,manybits 'manybits is not a persistent ram variable across banks.
+
+if(nvr_manybits__fwing_brake = WING_BRAKE_ENGAGED_FLAG) then
+   pwm12 = FWING_BRAKE_ENGAGED_PWM
+else
+   pwm12 = FWING_BRAKE_DISENGAGED_PWM
+endif
+
+if(nvr_manybits__bwing_brake = WING_BRAKE_ENGAGED_FLAG) then
+   pwm13 = BWING_BRAKE_ENGAGED_PWM
+else
+   pwm13 = BWING_BRAKE_DISENGAGED_PWM
+endif
+'------------------
+
+'debug "f brake ", DEC pwm12, "  b brake ", DEC pwm13, CR
+
+
+'Always turn on the light.  Probably don't need to do this every loop.
+relay8_fwd = 1
+relay8_rev = 0
+
+GET s_fwing_tgt, tmp5
+'debug "WTrg9=", dec tmp5 
+
+'debug "FL=", dec pwm2, " FR=", dec pwm5, " BL=", dec pwm8, " BR=", dec pwm9, CR
+'debug " FWingOut=", dec pwm6, CR
+
+'=============================================================================================================
+'========== OUTPUT DATA ======================================================================================
+'=============================================================================================================
+'  The Serout line sends data to the Output uP.  The Output uP passes this to each PWM 1-16
+'  and Relay 1-8.  The Output uP will not output data if there is no communication with the
+'  Operator Interface or if the Competition Mode is Disabled.  Do not delete any elements
+'  from the Serout array.  Set unused PWM outputs to 127.  Set unused relay outputs to 0.
+'
+'  Serout USERCPU, OUTBAUD, [255,255,(PWM1),relayA,(PWM2),relayB,(PWM3),(PWM4),(PWM5),(PWM6),(PWM7),(PWM8),
+'			    (PWM9),(PWM10),(PWM11),(PWM12),(PWM13),(PWM14),(PWM15),(PWM16)]
+
+   Serout USERCPU, OUTBAUD, [255,255,127,relayA,pwm2,relayB,pwm3,pwm4,pwm5,pwm6,pwm7,pwm8,
+                             pwm9,pwm10,127,pwm12,pwm13,127,127,127]
+
+'debug "
+return 'from WriteOutputs
+
+
+
+'===========================================
+'========= TwitchTest Subroutine ===========
+'===========================================
+#IF TWITCH_TEST #THEN
+TwitchTest:
+'TwitchTest is its own loop, it calls ReadInputs & WriteOutputs
+
+'GET s_manybits, manybits 'manybits is not a persistent ram variable across banks.
+
+if nvr_manybits__twitchdone = 1 then twitchtest_done
+
+Gosub ReadInputs
+
+if nvr_PB_mode__comp_mode = 1 then twitchtest_stop     'comp_mode = 1 means robot is disabled so don't run the test
+
+
+'read pot
+'turn wheels left
+'read pot & compare values
+'turn wheels right
+'read pot & compare values
+
+tmp5 = 0 'loop counter
+GET s_lcrab_pot, tmp2
+PUT s_lcrab_init, tmp2
+GET s_rcrab_pot, tmp3
+PUT s_rcrab_init, tmp3
+
+
+twitch_loop:
+
+if nvr_manybits__twitchdone = 1 then twitchtest_done
+
+
+select (tmp5)
+   case < 45
+      'twitch to the left
+      PUT s_left_crab, 127+55
+      PUT s_right_crab, 127+55
+      Gosub WriteOutputs
+      tmp5 = tmp5 + 1
+   case = 45
+      'read inputs & varify that pots changed value
+      PUT s_left_crab, 127
+      PUT s_right_crab, 127
+      Gosub WriteOutputs
+      Gosub ReadInputs
+
+      'check left pot
+      GET s_lcrab_pot, tmp2
+      GET s_lcrab_init, tmp3
+
+      if (tmp2 < (tmp3+TWITCH_THRESHOLD)) then
+         #IF TWITCH_DEBUG #THEN
+         debug "Left pot is bad", CR
+         nvr_manybits__crab_broken = 1
+         #ENDIF
+      else
+        #IF TWITCH_DEBUG #THEN
+        debug "Left pot GOOD", CR
+        #ENDIF
+      endif
+
+      'check right pot
+      GET s_rcrab_pot, tmp2
+      GET s_rcrab_init, tmp3
+
+      if (tmp2 < (tmp3+TWITCH_THRESHOLD)) then
+         #IF TWITCH_DEBUG #THEN
+         debug "Right pot is bad", CR
+         nvr_manybits__crab_broken = 1
+         #ENDIF
+      else
+        #IF TWITCH_DEBUG #THEN
+        debug "Right pot GOOD", CR
+        #ENDIF
+      endif
+
+      tmp5 = tmp5 + 1
+   case < 215
+      'do nothing, wait for motors to stop running
+      tmp5 = tmp5 + 1
+   case < 250
+
+      'twitch to the right
+      PUT s_left_crab, 127-55
+      PUT s_right_crab, 127-55
+      Gosub WriteOutputs
+      tmp5 = tmp5 + 1
+   case = 250
+      goto twitchtest_stop
+endselect
+
+goto twitch_loop
+
+
+twitchtest_stop:
+
+PUT s_right_crab, 127
+PUT s_left_crab, 127
+Gosub WriteOutputs
+nvr_manybits__twitchdone = 1
+'PUT s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+
+
+twitchtest_done:
+
+return 'from TwitchTest
+#ENDIF
+
+
+
+'========================================
+'========= RunPump Subroutine ===========
+'== Inputs:  s_rc_swA (rc_sw1) - pressure switch
+'== Outputs: s_relayA (relay1) - solenoid for pump
+'== Modifys: rc_swA, relayA
+'== Purpose: turn pump on & off
+'========================================
+RunPump:
+
+'Pressure switch is connected to rc_sw1.  The switch is normally closed(1) and will open(0)
+'  when the system is up to pressure.  While the switch is closed(1) run the pump.
+GET s_rc_swA, rc_swA
+GET s_relayA, relayA
+if (rc_sw1 = 1) then
+  'System not pressurized...run pump forward
+  relay1_fwd = 1
+  relay1_rev = 0
+else
+  'Turn off pump
+  relay1_fwd = 0
+  relay1_rev = 0
+endif
+PUT s_relayA, relayA
+
+
+return 'from RunPump
+
+
+'========================================
+'========= SkidPad Subroutine ===========
+'== Inputs:  s_oi_swB (drive_trig) - lowers skid pad
+'==          s_oi_swB (crab_top) - 90 degree mode
+'== Outputs: s_relayA (relay2, relay3) - 90 & non-90 mode skid pads
+'== Modifys: oi_swB, relayA
+'== Purpose: Raise & lower the skid pad
+'========================================
+SkidPad:
+
+'When the trigger on the drive joystick (p2) is pulled, engage the skid pad solenoid.
+'  When not pulled, lift up the solenoid.
+GET s_oi_swB, oi_swB
+GET s_relayA, relayA
+if (drive_trig = 1) then
+   'Trigger pulled, engage solenoid (only need a pluse so we could watch for a change
+   '  in the button and only run the solenoid on the change loop).
+   'Only set the front skid pad in this routine, later when we change the wheel
+   '  mappings for 90 degree mode and 90 degree crab we'll deploy the correct
+   '  skid pad
+   relay2_fwd = 1  'Engage front skid pad
+   relay2_rev = 0
+   relay3_fwd = 0  'Disengage 90 degree skid pad
+   relay3_rev = 1
+else
+   'Trigger release, reverse solenoid (only need a pluse so we could watch for a change
+   '  in the button and only run the solenoid on the change loop).
+   'Disengage both front and side skid pad
+   relay3_fwd = 0
+   relay3_rev = 1
+
+   relay2_fwd = 0
+   relay2_rev = 1
+endif
+
+PUT s_relayA, relayA
+
+'debug "Relay2 F=", dec relay2_fwd, " R=", dec relay2_rev, " Relay3 F=", dec relay3_fwd, " R=", dec relay3_rev, CR  
+
+return 'from SkidPad
+
+
+
+'===============================================
+'========= WingManualMode Subroutine ===========
+'== Inputs:  s_oi_swA (fwing_up_sw, fwing_dn_sw) - up/down buttons for front wing
+'==          s_oi_swA (bwing_up_sw, bwing_dn_sw) - up/down buttons for back wing
+'== Outputs: s_front_wing - front wing speed
+'==          s_back_wing - back wing speed
+'== Modifys: s_oi_swA, tmp1, tmp2, tmp3, tmp4
+'== Calls:   StackerAndWingManualControl
+'== Purpose: control wing movement in manual mode
+'===============================================
+WingManualMode:
+
+GET s_oi_swA, oi_swA
+
+tmp1 = fwing_up_sw
+tmp2 = fwing_dn_sw
+tmp3 = WING_MANU_SPEED_UP
+tmp4 = WING_MANU_SPEED_DN
+Gosub StackerAndWingManualControl
+'debug "  F wing ", DEC tmp5
+PUT s_front_wing, tmp5
+
+'GET s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+if (tmp5 >= 127) then
+   nvr_manybits__fwing_brake = WING_BRAKE_ENGAGED_FLAG
+else
+   'Driving down...only case where we don't want the brake engaged
+   nvr_manybits__fwing_brake = WING_BRAKE_DISENGAGED_FLAG
+endif
+'PUT s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+
+tmp1 = bwing_up_sw
+tmp2 = bwing_dn_sw
+tmp3 = WING_MANU_SPEED_UP
+tmp4 = WING_MANU_SPEED_DN
+Gosub StackerAndWingManualControl
+'debug "  B wing ", DEC tmp5, CR
+PUT s_back_wing, tmp5
+
+'GET s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+if (tmp5 >= 127) then
+   nvr_manybits__bwing_brake = WING_BRAKE_ENGAGED_FLAG
+else
+   'Driving down...only case where we don't want the brake engaged
+   nvr_manybits__bwing_brake = WING_BRAKE_DISENGAGED_FLAG
+endif
+'PUT s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+
+return 'from WingManualMode
+
+
+'==============================================
+'========= BackWingInput Subroutine ===========
+'== Inputs:  s_bwing_oi - position of back wing pot on button box
+'== Outputs: s_bwing_tgt - target position of back wing (in degrees with 0 deg = vertical; 90 deg = horizontal)
+'== Modifys: tmp1, tmp2
+'== Purpose: scale from OI values to degrees
+'==============================================
+BackWingInput:
+
+GET s_bwing_oi, tmp1   'Set target based on the OI dial
+tmp1 = tmp1 MAX BWING_OI_0_DEG MIN BWING_OI_FULL_DN
+
+'debug "bwing OI ", DEC tmp1
+
+if (tmp1 >= BWING_OI_90_DEG) then
+   'scale between 0 degrees (straight up) and 90 degrees (horizontal)
+   tmp2 = (BWING_OI_0_DEG - tmp1) * WING_DEG_TOP_DIFF / BWING_OI_TOP_DIFF
+else
+   'scale between 90 degrees (horizontal) and full down
+   tmp2 = 90 + ((BWING_OI_90_DEG - tmp1) * WING_DEG_BOTTOM_DIFF / BWING_OI_BOTTOM_DIFF)
+endif
+
+PUT s_bwing_tgt, tmp2
+
+'debug " deg ", DEC tmp2, CR
+
+return 'from BackWingInput
+
+
+'================================================
+'========= BackWingScaling Subroutine ===========
+'== Inputs:  s_bwing_tgt - target position of back wing (in degrees with 0 deg = vertical; 90 deg = horizontal)
+'== Outputs: s_bwing_tgt - target position of back wing (pot values)
+'== Modifys: tmp1, tmp2
+'== Purpose: scale from degrees to pot values
+'================================================
+BackWingScaling:
+
+GET s_bwing_tgt, tmp1
+'REMEMBER...target degrees go up and wing goes down...pot values go down as wing goes down
+if(tmp1 < WING_DEG_90_DEG) then
+   'We are in the 0-90 degree range...the top half of the wing movement
+   'Scale 0-90 degrees to 0-90Pot values
+   tmp1 = BWING_POT_0_DEG - (tmp1*(BWING_POT_0_DEG - BWING_POT_90_DEG)/(WING_DEG_90_DEG - WING_DEG_0_DEG))
+else
+   'We are in the 90+ degree range...the bottom half of the wing movement
+   'Scale 90-FULL_DN degrees to corresponding pot values
+   tmp1 = BWING_POT_90_DEG - ((tmp1 - WING_DEG_90_DEG)*(BWING_POT_90_DEG - BWING_POT_FULL_DN)/(WING_DEG_FULL_DN - WING_DEG_90_DEG))
+endif
+
+'Quick double check to make sure we are not over the max(0 deg)/min(full dn)
+tmp1 = tmp1 MAX BWING_POT_0_DEG MIN BWING_POT_FULL_DN
+PUT s_bwing_tgt, tmp1
+
+return 'from BackWingScaling
+
+
+'================================================
+'========= BackWingControl Subroutine ===========
+'== Inputs:  
+'== Outputs: 
+
+'== Modifys: 
+'== Calls:   MoveWings
+'== Purpose: 
+'================================================
+BackWingControl:
+
+GET s_bwing_tgt, tmp1
+GET s_bwing_pot, tmp2
+'GET s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+
+'debug "  B wing tgt: ", DEC tmp1, " wing pot: ", DEC tmp2
+
+'Passes wing 90 degree point to MoveWings subroutine
+tmp3 = BWING_POT_90_DEG
+Gosub MoveWings        'Returns speed in tmp3
+
+if (tmp3 >= 127) then
+   nvr_manybits__bwing_brake = WING_BRAKE_ENGAGED_FLAG
+else
+   'Driving down...only case where we don't want the brake engaged
+   nvr_manybits__bwing_brake = WING_BRAKE_DISENGAGED_FLAG
+endif
+
+PUT s_back_wing, tmp3
+'PUT s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+'debug " wing speed: ", DEC tmp3, CR
+
+return 'from BackWingControl
+
+
+
+'===============================================
+'========= FrontWingInput Subroutine ===========
+'== Inputs:  s_fwing_oi - position of front wing pot on button box
+'== Outputs: s_fwing_tgt - target position of front wing (in degrees with 0 deg = vertical; 90 deg = horizontal)
+'== Modifys: tmp1, tmp2
+'== Purpose: scale from OI values to degrees
+'===============================================
+FrontWingInput:
+
+GET s_fwing_oi, tmp1   'Set target based on the OI dial
+tmp1 = tmp1 MAX FWING_OI_0_DEG MIN FWING_OI_FULL_DN
+
+'debug "fwing OI ", DEC tmp1
+
+if (tmp1 >= FWING_OI_90_DEG) then
+   'scale between 0 degrees (straight up) and 90 degrees (horizontal)
+   tmp2 = (FWING_OI_0_DEG - tmp1) * WING_DEG_TOP_DIFF / FWING_OI_TOP_DIFF
+else
+   'scale between 90 degrees (horizontal) and full down
+   tmp2 = 90 + ((FWING_OI_90_DEG - tmp1) * WING_DEG_BOTTOM_DIFF / FWING_OI_BOTTOM_DIFF)
+endif
+
+PUT s_fwing_tgt, tmp2
+
+'debug " deg ", DEC tmp2, CR
+
+return 'from FrontWingInput
+
+
+'===============================================
+'========= FrontWingScaling Subroutine ===========
+'== Inputs:  s_fwing_tgt - target position of front wing (in degrees with 0 deg = vertical; 90 deg = horizontal)
+'== Outputs: s_fwing_tgt - target position of front wing (pot values)
+'== Modifys: tmp1, tmp2
+'== Purpose: scale from degrees to pot values
+'================================================
+FrontWingScaling:
+
+GET s_fwing_tgt, tmp1
+
+'REMEMBER...target degrees go up and wing goes down...pot values go down as wing goes down
+if(tmp1 < WING_DEG_90_DEG) then
+   'We are in the 0-90 degree range...the top half of the wing movement
+   'Scale 0-90 degrees to 0-90Pot values
+   tmp1 = FWING_POT_0_DEG - (tmp1*(FWING_POT_0_DEG - FWING_POT_90_DEG)/(WING_DEG_90_DEG - WING_DEG_0_DEG))
+else
+   'We are in the 90+ degree range...the bottom half of the wing movement
+   'Scale 90-FULL_DN degrees to corresponding pot values
+   tmp1 = FWING_POT_90_DEG - ((tmp1-WING_DEG_90_DEG)*(FWING_POT_90_DEG - FWING_POT_FULL_DN)/(WING_DEG_FULL_DN - WING_DEG_90_DEG))
+endif
+
+'Quick double check to make sure we are not over the max(0 deg)/min(full dn)
+tmp1 = tmp1 MAX FWING_POT_0_DEG MIN FWING_POT_FULL_DN
+PUT s_fwing_tgt, tmp1
+
+return 'from FrontWingScaling
+
+
+'=================================================
+'========= FrontWingControl Subroutine ===========
+'== Inputs:  
+'== Outputs: 
+'== Modifys: 
+'== Calls:   MoveWings
+'== Purpose: 
+'=================================================
+FrontWingControl:
+
+GET s_fwing_tgt, tmp1
+GET s_fwing_pot, tmp2
+'GET s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+
+'debug "  F wing tgt ", DEC tmp1, " wing pot ", DEC tmp2
+
+'Passes wing 90 degree point to MoveWings subroutine
+tmp3 = FWING_POT_90_DEG
+Gosub MoveWings        'Returns speed in tmp3
+
+if (tmp3 >= 127) then
+   nvr_manybits__fwing_brake = WING_BRAKE_ENGAGED_FLAG
+else
+   'Driving down...only case where we don't want the brake engaged
+   nvr_manybits__fwing_brake = WING_BRAKE_DISENGAGED_FLAG
+endif
+
+PUT s_front_wing, tmp3
+'PUT s_manybits, manybits 'manybits is now a persistent ram variable across banks.
+'debug " wing speed: ", DEC tmp3, CR
+
+return 'from FrontWingControl
+
+
+
+'==========================================
+'========= MoveWings Subroutine ===========
+'== Inputs:  tmp1 - wing target
+'==          tmp2 - current wing position
+'==          tmp3 - wing 90 degree point
+'==          stacker_up_sw - stacker up switch
+'== Outputs: tmp3 - wing motor speed
+'== Modifys: tmp3
+'== Purpose: feedback loop for wings
+'==========================================
+MoveWings:
+
+'pot values increase as wings go up
+
+if (tmp1 < tmp2) then wing_down
+if (tmp1 > tmp2) then wing_up
+tmp3 = 127
+goto wings_done
+
+wing_down:
+GET s_oi_swA, oi_swA
+'Enables turbo down on wing when stacker down switch is pressed and wing target is higher than 90 degree point
+if ((stacker_dn_sw = 1) and (tmp2 > tmp3)) then
+   tmp3 = 127-WING_TURBO_DOWN
+else
+   select (tmp2 - tmp1)
+      case < WING_POSITION_NEAR
+         tmp3 = 127
+      case < WING_POSITION_CLOSE
+         tmp3 = 127-WING_SLOW_DOWN
+      case < WING_POSITION_FAR
+         tmp3 = 127-WING_MED_DOWN
+      case else
+         tmp3 = 127-WING_FAST_DOWN
+   endselect
+endif
+goto wings_done
+
+wing_up:
+GET s_oi_swA, oi_swA
+'Enables turbo up when stacker down switch is pressed and wing target is lower than 90 degree point
+if ((stacker_up_sw = 1) and (tmp2 < tmp3)) then
+   tmp3 = 127+WING_TURBO_UP
+else
+   select (tmp1 - tmp2)
+      case < WING_POSITION_NEAR
+         tmp3 = 127
+      case < WING_POSITION_CLOSE
+         tmp3 = 127+WING_SLOW_UP
+      case < WING_POSITION_FAR
+         tmp3 = 127+WING_MED_UP
+      case else
+         tmp3 = 127+WING_FAST_UP
+   endselect
+endif
+goto wings_done
+
+wings_done:
+
+return 'from MoveWings
+
+
+
+'===============================================
+'========= ScraperControl Subroutine ===========
+'== Inputs:  s_oi_swA (scraper_sw) - switch to extend scraper
+'== Outputs: s_relayA (relay4) - scraper
+'== Modifys: oi_swA, relayA
+'== Purpose: Extend and retract scraper
+'===============================================
+ScraperControl:
+GET s_oi_swA, oi_swA
+GET s_relayA, relayA
+
+'Extend scraper if button is pressed
+if (scraper_sw = 1) then
+   relay4_fwd = 1
+   relay4_rev = 0
+else
+   relay4_fwd = 0
+   relay4_rev = 0
+endif
+
+PUT s_relayA, relayA
+
+return 'from StackerHookControl
+
+
+#IF STACKER_INSTALLED #THEN
+'==================================================
+'========= StackerManualMode Subroutine ===========
+'== Inputs:  s_oi_swA (stacker_up_sw, stacker_dn_sw) - up/down buttons for stacker
+'== Outputs: s_stacker - stacker speed
+'== Modifys: oi_swA, tmp5
+'== Calls:   StackerAndWingManualControl
+'== Purpose: control stacker movement in manual mode
+'==================================================
+StackerManualMode:
+
+GET s_oi_swA, oi_swA
+tmp1 = stacker_up_sw
+tmp2 = stacker_dn_sw
+tmp3 = STACKER_MANU_SPEED_UP
+tmp4 = STACKER_MANU_SPEED_DN
+Gosub StackerAndWingManualControl
+'debug "  Manu stacker ", DEC tmp5, CR
+PUT s_stacker, tmp5
+
+return 'from StackerManualMode
+
+
+
+'====================================================
+'========= StackerInputScaling Subroutine ===========
+'== Inputs:  s_stacker_oi - position of stacker pot on button box
+'== Outputs: s_stacker_tgt - target position of stacker
+'== Modifys: tmp1, tmp2
+'== Purpose: Convert from OI pot ticks to Robot pot ticks
+'====================================================
+StackerInputScaling:
+
+GET s_stacker_oi, tmp1
+
+'don't over run the min & max values
+tmp1 = tmp1 MIN STACKER_OI_MIN
+tmp1 = tmp1 MAX STACKER_OI_MAX
+
+tmp2 = STACKER_POT_MIN_POS + ((tmp1 - STACKER_OI_MIN) * STACKER_POT_DIFF / STACKER_OI_DIFF)
+
+PUT s_stacker_tgt, tmp2
+
+'if stacker toggle switch is down and oi pot is down then move stacker to under bar position
+if ((stacker_dn_sw = 1) and (tmp2 <= STACKER_POT_BIN_GRAB)) then
+   PUT s_stacker_tgt, STACKER_POT_MIN_POS
+endif
+
+'if stacker toggle switch is up and oi pot is up then move stacker to starting postion
+if ((stacker_up_sw = 1) and (tmp2 >= STACKER_POT_BIN_RELEASE)) then
+   PUT s_stacker_tgt, STACKER_POT_MAX_POS
+endif
+
+return 'from StackerInputScaling
+
+
+
+'===================================================
+'========= StackerHookControl Subroutine ===========
+'== Inputs:  s_oi_swA (stacker_hk_sw) - switch to raise / lower stacker hooks
+'==          s_stacker_tgt - stacker target
+'== Outputs: s_relayA (relay4) - stacker hooks
+'== Modifys: oi_swA, relayA, tmp1
+'== Calls:   StackerFeedback
+'== Purpose: Extend and retract hooks on stacker
+'===================================================
+StackerHookControl:
+GET s_oi_swA, oi_swA
+GET s_relayA, relayA
+GET s_stacker_tgt, tmp1
+
+'Extend stacker hooks if button is pressed of if stacker is in full down position
+'if ((stacker_hk_sw = 1) OR (tmp1 = STACKER_POT_MIN_POS))then
+if (stacker_hk_sw = 1) then
+   relay4_fwd = 1
+   relay4_rev = 0
+else
+   relay4_fwd = 0
+   relay4_rev = 0
+endif
+
+PUT s_relayA, relayA
+
+return 'from StackerHookControl
+
+
+
+'================================================
+'========= StackerFeedback Subroutine ===========
+'== Inputs:  s_stacker_tgt - stacker target (in Robot pot values)
+'==          s_stacker_pot - current position of stacker (in Robot pot values)
+'== Outputs: s_stacker - stacker speed
+'== Modifys: tmp1, tmp2, tmp3
+'== Purpose: feedback loop for stacker
+'================================================
+StackerFeedback:
+
+GET s_stacker_tgt, tmp1
+GET s_stacker_pot, tmp2
+
+'debug " pot: ", DEC tmp2
+
+if (tmp1 < tmp2) then stacker_feedback_down
+
+if (tmp1 > tmp2) then stacker_feedback_up
+tmp3 = 127
+goto stacker_feedback_done
+
+stacker_feedback_down:
+   select (tmp2 - tmp1)
+      case < STACKER_POSITION_NEAR
+         tmp3 = 127
+      case < STACKER_POSITION_CLOSE
+         tmp3 = 127-STACKER_DOWN_SLOW
+      case < STACKER_POSITION_FAR
+         tmp3 = 127-STACKER_DOWN_MED
+      case else
+         tmp3 = 127-STACKER_DOWN_FAST
+   endselect
+goto stacker_feedback_done
+
+stacker_feedback_up:
+   select (tmp1 - tmp2)
+      case < STACKER_POSITION_NEAR
+         tmp3 = 127
+      case < STACKER_POSITION_CLOSE
+         tmp3 = 127+STACKER_UP_SLOW
+      case < STACKER_POSITION_FAR
+         tmp3 = 127+STACKER_UP_MED
+      case else
+         tmp3 = 127+STACKER_UP_FAST
+   endselect
+goto stacker_feedback_done
+
+stacker_feedback_done:
+
+'debug " speed ", DEC tmp3
+'debug CR
+
+PUT s_stacker, tmp3
+
+return 'from StackerFeedback
+#ENDIF
+
+
+'============================================================
+'========= StackerAndWingManualControl Subroutine ===========
+'== Inputs:  tmp1 - up button
+'==          tmp2 - down button
+'==          tmp3 - up speed
+'==          tmp4 - down speed
+'== Outputs: tmp5 - speed of stacker / wing
+'== Modifys: tmp5
+'== Purpose: run the stacker/wing up & down in manual mode
+'============================================================
+StackerAndWingManualControl:
+
+if (tmp1 = 1) then
+   tmp5 = 127+tmp3
+else
+   if (tmp2 = 1) then
+      tmp5 = 127-tmp4
+   else
+      tmp5 = 127
+   endif
+endif
+
+return 'from StackerAndWingManualControl
+
+

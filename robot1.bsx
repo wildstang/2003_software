@@ -1,0 +1,593 @@
+' {$PBASIC 2.5}
+' {$STAMP BS2sx, robot2.bsx, robot3.bsx, robot3_2.bsx, robot4.bsx, robot5.bsx}
+
+' PROGRAM:    Wildstang 2003 Robot Software
+' File Name:  robot1.bsx
+' Written by: 2003 Wildstang Software Team
+
+
+' File Description:
+'
+
+' Version History
+'
+' Date       Who          Description
+' --------   -----------  ------------------------------------------------------------------------------------
+' 01/14/02   M. Soukup    Initial creation
+' 01/15/02   M. Soukup    Migrate 2002 program structure & code
+
+
+
+'=============================================================================================================
+'========== DECLARE VARIABLES ================================================================================
+'=============================================================================================================
+'  Below is a list of declared input and output variables.  Comment or un-comment
+'  the variables as needed.  Declare any additional variables required in
+'  your main program loop.  Note that you may only use 26 total variables.
+
+'---------- Misc. MUST BE THE FIRST VARIABLES IN ALL BANKS ---------------------------------------------------
+'------PERSISTENT VARIABLES -- VALID IN ALL BANKS ------------------------------------------------------------
+'NOTE:In order for these variables to be valid in ALL banks, they must be in the exact same spot in each bank.
+'     To do this, just always keep these as the first variables in each bank.
+'packet_num	VAR byte
+'delta_t	VAR byte
+
+'---------- Aliases for the Pbasic Mode Byte (nvr_PB_mode) -------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Bit 7 of the nvr_PB_mode byte (aliased as comp_mode below) indicates the status
+'  of the Competition Control, either Enabled or Disabled.  This indicates the
+'  starting and stopping of rounds at the competitions.
+'  Comp_mode is indicated by a solid "Disabled" LED on the Operator Interface.
+'  Comp_mode = 1 for Enabled, 0 for Disabled.
+'
+'  Bit 6 of the nvr_PB_mode byte (aliased as auton_mode below) indicates the status
+'  of the Autonomous Mode, either Autonomous or Normal.  This indicates when
+'  the robot must run on its own programming.  When in Autonomous Mode, all
+'  OI analog inputs are set to 127 and all OI switch inputs are set to 0 (zero).
+'  Auton_mode is indicated by a blinking "Disabled" LED on the Operator Interface.
+'  Auton_mode = 1 for Autonomous, 0 for Normal.
+'
+'  Autonomous Mode can be turned ON by setting the RC to Team 0 (zero).
+
+'
+'  Bit 5 of the nvr_PB_mode byte (aliased as user_display_mode below) indicates when
+'  the user selects the "User Mode" on the OI.  nvr_PB_mode.bit5 is set to 1 in "User Mode".
+'  When the user selects channel, team number, or voltage, nvr_PB_mode.bit5 is set to 0
+'  When in "User Mode", the eight Robot Feedback LED are turned OFF.
+'  Note: "User Mode" is identified by the letter u in the left digit (for 4 digit OI's)
+'  Note: "User Mode" is identified by decimal places on the right two digits (for 3 digit OI's)
+nvr_PB_mode                    VAR byte
+nvr_PB_mode__comp_mode         VAR nvr_PB_mode.bit7
+nvr_PB_mode__auton_mode        VAR nvr_PB_mode.bit6
+nvr_PB_mode__user_display_mode VAR nvr_PB_mode.bit5 
+
+nvr_manybits                   VAR byte
+nvr_manybits__twitchdone       VAR nvr_manybits.bit0
+nvr_manybits__crab_broken      VAR nvr_manybits.bit1
+nvr_manybits__first_loop       VAR nvr_manybits.bit2
+nvr_manybits__first_auto_loop  VAR nvr_manybits.bit3
+nvr_manybits__prev_loop_ctr    VAR nvr_manybits.bit4
+nvr_manybits__prev_loop_dir    VAR nvr_manybits.bit5
+nvr_manybits__fwing_brake      VAR nvr_manybits.bit6
+nvr_manybits__bwing_brake      VAR nvr_manybits.bit7
+
+'---------- Operator Interface (OI) - Analog Inputs ----------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+p1_x		VAR byte	'Port 1, X-axis on Joystick
+pwm5		VAR p1_x
+
+p2_x		VAR byte	'Port 2, X-axis on Joystick
+pwm6		VAR p2_x
+
+p3_x		VAR byte	'Port 3, X-axis on Joystick
+pwm7		VAR p3_x
+
+p4_x		VAR byte	'Port 4, X-axis on Joystick
+pwm8		VAR p4_x
+
+p1_y		VAR byte	'Port 1, Y-axis on Joystick
+pwm1		VAR p1_y
+
+p2_y		VAR byte	'Port 2, Y-axis on Joystick
+pwm2		VAR p2_y
+
+'p3_y		VAR byte	'Port 3, Y-axis on Joystick
+'pwm3		VAR p3_y
+
+p4_y		VAR byte	'Port 4, Y-axis on Joystick
+pwm4		VAR p4_y
+
+p1_wheel	VAR byte	'Port 1, Wheel on Joystick
+pwm9		VAR p1_wheel
+
+'p2_wheel	VAR byte	'Port 2, Wheel on Joystick
+'pwm10		VAR p2_wheel
+
+'p3_wheel	VAR byte	'Port 3, Wheel on Joystick
+'pwm11		VAR p3_wheel
+
+'p4_wheel	VAR byte	'Port 4, Wheel on Joystick
+'pwm12		VAR p4_wheel
+
+'p1_aux		VAR byte	'Port 1, Aux on Joystick
+'pwm13		VAR p1_aux
+
+'p2_aux		VAR byte	'Port 2, Aux on Joystick
+'pwm14		VAR p2_aux
+
+'p3_aux		VAR byte	'Port 3, Aux on Joystick
+'pwm15		VAR p3_aux
+
+'p4_aux		VAR byte	'Port 4, Aux on Joystick
+'pwm16		VAR p4_aux
+
+
+tmp1            VAR byte
+
+'Keep track of the the user_mode bit (RC request to see user data instead of LEDs) 
+tmp1_manybits2__force_auto     VAR tmp1.bit0    'User requested robot to run auto regardless of auton bit from OI 
+tmp1_manybits2__prev_user_mode VAR tmp1.bit1    'Previous loop value of the PBMode.user_mode
+tmp1_manybits2__many2          VAR tmp1.bit2
+tmp1_manybits2__many3          VAR tmp1.bit3
+tmp1_manybits2__loop_cnt       VAR tmp1.HIGHNIB 'Keep loop count...incrememnted each loop
+
+
+'---------- Operator Interface - Digital Inputs --------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+oi_swA		VAR byte	'OI Digital Switch Inputs 1 thru 8
+oi_swB		VAR byte	'OI Digital Switch Inputs 9 thru 16
+
+
+'---------- Robot Controller (RC) - Analog Inputs ------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+sensor1	VAR byte	'RC Analog Input 1, connector pin 2
+sensor2	VAR byte	'RC Analog Input 2, connector pin 16
+sensor3	VAR byte	'RC Analog Input 3, connector pin 5
+sensor4	VAR byte	'RC Analog Input 4, connector pin 19
+'sensor5	VAR byte	'RC Analog Input 5, connector pin 8
+'sensor6	VAR byte	'RC Analog Input 6, connector pin 22
+'sensor7	VAR byte	'RC Analog Input 7, connector pin 11
+bat_volt	VAR byte	'RC Analog Input 8, hardwired to the Battery
+				'Vin = ((4.7/14.7)* Battery voltage)-0.4
+				'Binary Battery Voltage = (Vin/5.0 V)*255
+
+
+'---------- Robot Controller - Digital Inputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+rc_swA		VAR byte	'RC Digital Inputs 1 thru 8
+'rc_swB		VAR byte	'RC Digital Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Outputs ---------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+relayA		VAR byte
+relayB		VAR byte
+
+
+
+'=============================================================================================================
+'========== DEFINE ALIASES ===================================================================================
+'=============================================================================================================
+'  Aliases are variables which are sub-divisions of variables defined
+'  above.  Aliases don't require any additional RAM.
+
+
+'---------- Aliases for each OI switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Operator Interface.
+'  Ports 1 & 3 have their inputs duplicated in ports 4 & 2 respectively.  The 
+'  inputs from ports 1 & 3 may be disabled via the 'Disable' dip switch 
+'  located on the Operator Interface.  See Users Manual for details.
+
+fwing_up_sw	VAR oi_swA.bit0	'p1_sw_trig
+fwing_dn_sw	VAR oi_swA.bit1	'p1_sw_top
+bwing_up_sw	VAR oi_swA.bit2	'p1_sw_aux1
+bwing_dn_sw	VAR oi_swA.bit3	'p1_sw_aux2
+
+stacker_up_sw	VAR oi_swA.bit4	'p3_sw_trig
+stacker_dn_sw	VAR oi_swA.bit5	'p3_sw_top
+scraper_sw	VAR oi_swA.bit6	'p3_sw_aux1
+crab_ovr_sw	VAR oi_swA.bit7	'p3_sw_aux2
+
+p2_sw_trig	VAR oi_swB.bit0	'p2_sw_trig
+p2_sw_top	VAR oi_swB.bit1	'p2_sw_top
+p2_sw_aux1	VAR oi_swB.bit2	'p2_sw_aux1
+p2_sw_aux2	VAR oi_swB.bit3	'p2_sw_aux2
+
+crab_trig	VAR oi_swB.bit4	'p4_sw_trig
+crab_top	VAR oi_swB.bit5	'p4_sw_top
+drive_trig	VAR oi_swB.bit6	'p4_sw_aux1
+drive_top	VAR oi_swB.bit7	'p4_sw_aux2
+
+
+'---------- Aliases for each RC switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Robot Controller.
+
+rc_sw1		VAR rc_swA.bit0
+rc_sw2		VAR rc_swA.bit1
+rc_sw3		VAR rc_swA.bit2
+rc_sw4		VAR rc_swA.bit3
+rc_sw5		VAR rc_swA.bit4
+rc_sw6		VAR rc_swA.bit5
+rc_sw7		VAR rc_swA.bit6
+rc_sw8		VAR rc_swA.bit7
+
+'---------- Aliases for each RC Relay outputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the relay outputs located on the Robot Controller.
+
+relay1_fwd	VAR relayA.bit0
+relay1_rev	VAR relayA.bit1
+relay2_fwd	VAR relayA.bit2
+relay2_rev	VAR relayA.bit3
+relay3_fwd	VAR relayA.bit4
+relay3_rev	VAR relayA.bit5
+relay4_fwd	VAR relayA.bit6
+relay4_rev	VAR relayA.bit7
+
+relay5_fwd	VAR relayB.bit0
+relay5_rev	VAR relayB.bit1
+relay6_fwd	VAR relayB.bit2
+relay6_rev	VAR relayB.bit3
+relay7_fwd	VAR relayB.bit4
+relay7_rev	VAR relayB.bit5
+relay8_fwd	VAR relayB.bit6
+relay8_rev	VAR relayB.bit7
+
+'=============================================================================================================
+'========= DEFINE CONSTANTS FOR INITIALIZATION ===============================================================
+'=============================================================================================================
+'  The initialization code is used to select the input data used by PBASIC.
+'  The Master micro-processor (uP) sends the data you select to the BS2SX
+'  PBASIC uP.  You may select up to 26 constants, corresponding
+'  to 26 variables, from the 32 available to you.  Make sure that you have 
+'  variables for all the bytes recieved in the serin command.
+'
+'  The constants below have a "c_" prefix, as compared to the variables that 
+'  they will represent.
+'
+'  Set the Constants below to 1 for each data byte you want to recieve.
+'  Set the Constants below to 0 for the unneeded data bytes.
+
+
+'---------- Set the Initialization constants you want to read ------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+c_p1_y				CON	1
+c_p2_y				CON	0
+c_p3_y				CON	0
+c_p4_y				CON	1
+
+c_p1_x				CON	1
+c_p2_x				CON	0
+c_p3_x				CON	1
+c_p4_x				CON	1
+
+c_p1_wheel			CON	0
+c_p2_wheel			CON	1
+c_p3_wheel			CON	0
+c_p4_wheel			CON	1
+
+c_p1_aux			CON	0
+c_p2_aux			CON	0
+c_p3_aux			CON	0
+c_p4_aux			CON	1
+
+c_oi_swA			CON	1
+c_oi_swB			CON	1
+
+c_sensor1			CON	1
+c_sensor2			CON	1
+c_sensor3			CON	1
+c_sensor4			CON	1
+c_sensor5			CON	1
+c_sensor6			CON	0
+c_sensor7			CON	0
+c_batt_volt			CON	1
+
+c_rc_swA			CON	1
+c_rc_swB			CON	0
+
+c_delta_t			CON	0
+c_PB_mode			CON	1
+c_packet_num			CON	0
+c_res01				CON	0
+
+
+'=============================================================================
+'SHARED Constants (these are used by more than one bank and MUST AGREE in each) 
+TRUE		CON 1
+FALSE		CON 0
+
+'=============================================================================
+'Constants for Scratchpad ram locations [0-62] (63 reserved)
+'(these constants are shared and must agree in all banks) 
+
+'(I just reserved these in the order they come in the serin stream)
+
+s_oi_swA	CON	0
+s_oi_swB	CON	1
+s_rc_swA	CON	2
+s_drive_x       CON     3
+s_drive_y       CON     4
+s_crab_x        CON     5
+s_crab_y        CON     6
+s_fwing_oi      CON     7
+s_bwing_oi      CON     8
+s_stacker_oi    CON     9
+s_manybits2	CON	10  'additional status bits
+'s_packet_num 	CON	11
+s_lcrab_pot	CON	12	'left crab pot
+s_rcrab_pot	CON	13	'right crab pot
+
+s_fwing_pot	CON	15	'front wing pot
+s_bwing_pot	CON	16	'back wing pot
+
+'s_p3_y		CON	17
+s_stacker_pot	CON	18	'stacker pot
+'s_sensor6	CON	19
+'s_p2_wheel	CON	20
+'s_p1_wheel	CON	21
+'s_sensor7	CON	22
+'(...end of possible serin inputs.  continue now, with outputs and stored user variables.) 
+
+s_stacker_tgt   CON     25
+'s_waypoint_sel  CON     26
+s_waypoint_flgs CON     27   'flags associated with waypoint
+
+s_curr_pos_x	CON	32
+s_curr_pos_y	CON	33
+s_curr_orient	CON	34   'current compass value (or theta) of the robot
+s_target_orient CON     35   'target compass value of the robot
+
+s_fwing_wp_tgt  CON     36
+s_bwing_wp_tgt  CON     37
+
+s_waypoint 	CON	38
+s_target_heading CON	39
+
+s_relayA	CON	40
+s_relayB	CON	41
+
+s_fwing_tgt	CON	42
+s_bwing_tgt	CON	43
+
+s_rcrab_target	CON	44
+s_lcrab_target	CON	45
+s_right_crab	CON	46  'crab steering motor speed
+s_left_crab	CON	47
+s_rcrab_init	CON	48
+s_lcrab_init	CON	49
+
+s_lf_cur	CON	50  'current speed of drive wheels
+s_rf_cur	CON	51
+s_lb_cur	CON	52
+s_rb_cur	CON	53
+
+s_lf_wheel	CON	54  'stored value for left_wheel 
+s_rf_wheel	CON	55
+s_lb_wheel	CON	56
+s_rb_wheel	CON	57
+
+s_front_wing	CON	58  'current speed of wings
+s_back_wing	CON	59
+s_stacker       CON     60  'current speed of stacker
+
+s_bat_volt	CON	62
+s_banknumber	CON	63  'Read-Only
+
+' ...insert any other storage names up to 62 that are useful... 
+
+
+
+'---------- Initialization Constant VOLTAGE - USER DEFINED ---------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  This is the 'Low Battery' detect voltage.  The 'Low Battery' LED will
+'  blink when the voltage drops below this value.
+'  Basically, the value = ((DESIRED FLASH VOLTAGE * 16.46) - 8.35)
+'  Example, for a 6.5 Volt Flash trigger, set value = 99.
+
+dataInitVolt			CON 	140
+
+
+
+
+'=============================================================================================================
+'========== DEFINE CONSTANTS (DO NOT CHANGE) =================================================================
+'=============================================================================================================
+' Baud rate for communications with User CPU
+OUTBAUD				CON 	20	'(62500, 8N1, Noninverted)
+INBAUD				CON 	20	'(62500, 8N1, Noninverted)
+
+USERCPU				CON 	4
+FPIN				CON 	1
+COMA				CON 	1
+COMB				CON 	2
+COMC				CON 	3
+
+
+'=============================================================================================================
+'========== MAIN PROGRAM =====================================================================================
+'=============================================================================================================
+
+'=============================
+'========= SysInit ===========
+'=============================
+'---------- Input & Output Declarations ----------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+Output			COMB
+Input			COMA
+Input			COMC
+
+Output			7	'define Basic Run LED on RC => out7
+
+Output      		8	'define Robot Feedback LED => out8  => PWM1 Green
+Output      		9	'define Robot Feedback LED => out9  => PWM1 Red
+Output      		10	'define Robot Feedback LED => out10 => PWM2 Green
+Output      		11	'define Robot Feedback LED => out11 => PWM2 Red
+Output      		12	'define Robot Feedback LED => out12 => Relay1 Red
+Output      		13	'define Robot Feedback LED => out13 => Relay1 Green
+Output      		14	'define Robot Feedback LED => out14 => Relay2 Red
+Output      		15	'define Robot Feedback LED => out15 => Relay2 Green
+
+
+'---------- Initialize Inputs & Outputs ----------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+Out7  = 1		'Basic Run LED on RC
+Out8  = 0		'PWM1 LED - Green
+Out9  = 0		'PWM1 LED - Red
+Out10 = 0		'PWM2 LED - Green
+Out11 = 0		'PWM2 LED - Red
+Out12 = 0		'Relay1 LED - Red
+Out13 = 0		'Relay1 LED - Green
+Out14 = 0		'Relay2 LED - Red
+Out15 = 0		'Relay2 LED - Green
+
+
+'=============================================================================================================
+'========== PBASIC - MASTER uP INITIALIZATION ROUTINE ========================================================
+'=============================================================================================================
+'  DO NOT CHANGE THIS!  DO NOT MOVE THIS!
+'  The init routine sends 5 bytes to the Master uP, defining which data bytes to receive.
+'  1)  Collect init.
+'  2)  Lower the COMA line, which is the clk line for the shift out command.
+'  3)  Lower COMB line to tell pic that we are ready to send init data.
+'  4)  Wait for pic to lower the COMC line, signaling pic is ready for data.
+'  5)  Now send out init dat to pic, all 5 bytes.
+'  6)  Now set direction and levels for the COMA and COMB pins.
+
+tempA		CON	c_p3_x <<1 + c_p4_x <<1 + c_p1_x <<1 + c_p2_x <<1 + c_rc_swB
+dataInitA	CON	tempA <<1 + c_rc_swA <<1 + c_oi_swB <<1 + c_oi_swA
+tempB		CON	c_sensor4 <<1 + c_sensor3 <<1 + c_p1_y <<1 + c_p2_y <<1 + c_sensor2
+dataInitB	CON	tempB <<1 + c_sensor1 <<1 + c_packet_num <<1 + c_PB_mode
+tempC		CON	c_batt_volt <<1 + c_sensor7 <<1 + c_p1_wheel <<1 + c_p2_wheel <<1 + c_sensor6
+dataInitC	CON	tempC <<1 + c_sensor5 <<1 + c_p3_y <<1 + c_p4_y
+tempD		CON	c_res01 <<1 + c_delta_t <<1 + c_p3_aux <<1 + c_p4_aux <<1 + c_p1_aux
+dataInitD	CON	tempD <<1 + c_p2_aux  <<1 + c_p3_wheel <<1 + c_p4_wheel
+
+Output		COMA
+low		COMA
+low		COMB
+Input		COMC
+
+Wait_init:	if IN3 = 1 then Wait_init:
+Shiftout	COMB,COMA,1, [dataInitA,dataInitB,dataInitC,dataInitD,dataInitVolt]
+Input		COMA
+high		COMB
+
+Output		COMC
+low		COMC
+
+
+
+'=============================
+'========= MemInit ===========
+'=============================
+p1_x = 127		'Port 1, X-axis on Joystick
+p2_x = 127		'Port 2, X-axis on Joystick
+p3_x = 127		'Port 3, X-axis on Joystick
+p4_x = 127		'Port 4, X-axis on Joystick
+
+p1_y = 127		'Port 1, Y-axis on Joystick
+p2_y = 127		'Port 2, Y-axis on Joystick
+'p3_y = 127		'Port 3, Y-axis on Joystick
+p4_y = 127		'Port 4, Y-axis on Joystick
+
+'p1_wheel = 127		'Port 1, Wheel on Joystick
+'p2_wheel = 127		'Port 2, Wheel on Joystick
+'p3_wheel = 127		'Port 3, Wheel on Joystick
+'p4_wheel = 127		'Port 4, Wheel on Joystick
+
+'p1_aux = 127		'Port 1, Aux Analog
+'p2_aux = 127		'Port 2, Aux Analog
+'p3_aux = 127		'Port 3, Aux Analog
+'p4_aux = 127		'Port 4, Aux Analog
+
+sensor1 = 127
+sensor2 = 127
+sensor3 = 127
+sensor4 = 127
+'sensor5 = 127
+bat_volt = 127
+
+nvr_PB_mode = 0
+
+
+'Initialize Scratchpad ram with default (safe) values:
+PUT s_oi_swA, 0
+PUT s_oi_swB, 0
+PUT s_rc_swA, 0
+'PUT s_rc_swB, 0
+PUT s_drive_x, 127
+PUT s_fwing_oi, 127
+PUT s_crab_x, 127
+PUT s_stacker_oi, 127
+'PUT s_PB_mode, 0  'PB_mode is now a persistent ram variable across banks.
+'PUT s_packet_num, 0
+PUT s_lcrab_pot, 127
+PUT s_rcrab_pot, 127
+PUT s_drive_y, 127
+PUT s_bwing_oi, 127
+PUT s_fwing_pot, 127
+PUT s_bwing_pot, 127
+PUT s_crab_y, 127
+'PUT s_p3_y, 127
+PUT s_stacker_pot, 127
+'PUT s_sensor6, 127
+'PUT s_p2_wheel, 127
+'PUT s_p1_wheel, 127
+'PUT s_sensor7, 127
+
+PUT s_curr_pos_x, 0
+PUT s_curr_pos_y, 0
+PUT s_curr_orient, 0
+
+PUT s_waypoint, 0
+PUT s_target_heading, 0
+
+PUT s_relayA, 0
+PUT s_relayB, 0
+
+PUT s_fwing_wp_tgt, 0
+PUT s_bwing_wp_tgt, 0
+
+PUT s_fwing_tgt, 127
+PUT s_bwing_tgt, 127
+
+PUT s_rcrab_target, 127
+PUT s_lcrab_target, 127
+PUT s_right_crab, 127
+PUT s_left_crab, 127
+PUT s_rcrab_init, 127
+PUT s_lcrab_init, 127
+
+PUT s_lf_wheel, 127  'final wheel speed to write to motors 
+PUT s_rf_wheel, 127
+PUT s_lb_wheel, 127
+PUT s_rb_wheel, 127
+PUT s_lf_cur, 127
+PUT s_rf_cur, 127
+PUT s_lb_cur, 127
+PUT s_rb_cur, 127
+
+PUT s_front_wing, 127
+PUT s_back_wing, 127
+PUT s_stacker, 127
+
+PUT s_bat_volt, 255
+
+
+'manybits is a bit field of miscelaneous stuff...
+nvr_manybits__twitchdone = 0  '1 means twitch test has finished.
+nvr_manybits__crab_broken = 0 '1 means crab is broken
+nvr_manybits__first_loop = 1  '1 means first time through main loop
+nvr_manybits__first_auto_loop = 1
+nvr_manybits__prev_loop_ctr = 0
+nvr_manybits__prev_loop_dir = 0
+
+PUT s_manybits2, 0
+
+Run 1 'never return
+
+
+

@@ -1,0 +1,987 @@
+' {$PBASIC 2.5}
+' {$STAMP BS2sx}
+
+
+
+'=============================================================================================================
+'========== CONDITIONAL COMPILATION ==========================================================================
+'=============================================================================================================
+' To prevent code from being compiled simply comment out the #DEFINE line
+
+' Comment out line to use pot & joystick values for proto robot
+#DEFINE COMPETITION_ROBOT
+
+
+'=============================================================================================================
+'========== WAYPOINTS ========================================================================================
+'=============================================================================================================
+
+'---------------- TargetSpeed must be <= 127 --------------------
+
+'starting points at michigan L = (69, 178)  R = (69, 63)
+
+'Initial point out of alley
+' Long:  L = (45,166)  R = (45,75)  Range 3
+' Short: L = (36,162)  R = (36,79)  Range 12
+' Tight: L = (40,157)  R = (40,84)  Range 12
+
+'-----Hug our side of the ramp and follow through to bottom of ramp.  (BBS Routine)
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4
+List0TargetPositionXRight       DATA   40,  66, 125, 196,   0
+List0TargetPositionXLeft        DATA   40,  66, 125, 196,   0
+List0TargetPositionYRight       DATA   84, 104, 108, 108,   0
+List0TargetPositionYLeft        DATA  157, 137, 133, 133,   0
+List0TargetOrientation          DATA    0,   0,   0,   0
+List0TargetSpeed                DATA  127, 127, 127, 127
+List0TargetFWingPosition        DATA    0,   0,  45,  45
+List0TargetBWingPosition        DATA    0,   0,  90,  90
+List0TargetWaypointRange        DATA   12,   3,   3,   3
+LIST0_NUMBER_WAYPOINTS    CON     4
+
+
+
+'-----Double hit and follow through.  Hit partner's half of stack first.  Continue over ramp to our scoring zone.
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5  Pt6
+List1TargetPositionXRight       DATA   40, 113, 124,  97, 137, 202,   0  '(point 2 was 119)
+List1TargetPositionXLeft        DATA   40, 113, 124,  97, 137, 202,   0  '(point 2 was 119)
+
+List1TargetPositionYRight       DATA   84, 140, 140, 133, 107, 101,   0
+List1TargetPositionYLeft        DATA  157, 101, 101, 108, 134, 140,   0
+
+List1TargetOrientation          DATA    0,   0,   0,   0,   0,   0
+List1TargetSpeed                DATA  127, 127, 127,  60, 127, 127
+List1TargetFWingPosition        DATA    0,   0,  45,  45,  45,  45
+List1TargetBWingPosition        DATA    0,   0,  90,  90,  90,  90
+List1TargetWaypointRange        DATA   12,  80,   3,   3,   3,   3
+LIST1_NUMBER_WAYPOINTS  CON  6
+
+
+'SLOW START POINT => X=33   Yr=79  Yl=162
+
+
+'-----One on the carpet, one on the top of the ramp(our side of center), one following through to the bottom 
+'     of the other side parking in front of the opponent on same side as start
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5
+List2TargetPositionXRight       DATA   40, 127, 127, 187, 214
+List2TargetPositionXLeft        DATA   40, 127, 127, 187, 214
+
+List2TargetPositionYRight       DATA   84, 114, 114, 114,  81
+List2TargetPositionYLeft        DATA  157, 127, 127, 127, 160
+
+List2TargetOrientation          DATA    0,   0,   0,   0,   0
+List2TargetSpeed                DATA  127, 127, 127, 127, 127
+List2TargetFWingPosition        DATA    0,   0,  45,  45,  45
+List2TargetBWingPosition        DATA    0,   0,  90,  90,  90
+List2TargetWaypointRange        DATA   12,  66,   3,   3,   3  'Raul said to move the wings opening 12" sooner
+LIST2_NUMBER_WAYPOINTS    CON     5
+
+
+
+'-----One on the carpet, one on the top of the ramp(our side of center), one following through to the bottom 
+'     of the other side parking in front of the opponent on opposite side as start
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5
+'---- Over park Right ---
+List3TargetPositionXRight       DATA   40, 127, 127, 187, 214
+List3TargetPositionXLeft        DATA   40, 127, 127, 187, 214
+
+List3TargetPositionYRight       DATA   84, 114, 114, 114, 160
+List3TargetPositionYLeft        DATA  157, 127, 127, 127,  81
+
+List3TargetOrientation          DATA    0,   0,   0,   0,   0
+List3TargetSpeed                DATA  127, 127, 127, 127, 127
+List3TargetFWingPosition        DATA    0,   0,  45,  45,  45
+List3TargetBWingPosition        DATA    0,   0,  90,  90,  90
+List3TargetWaypointRange        DATA   12,  66,   3,   3,   3  'Raul said to move the wings opening 12" sooner
+LIST3_NUMBER_WAYPOINTS    CON     5
+
+
+
+
+'-----Hit the bins in the center (our side of the center line) and park at the top 
+'     Currently ends up coasting just over the top so it ends up on the other side.  Need a brake point.
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5
+'---- Over park Right ---
+List4TargetPositionXRight       DATA   40, 127, 127
+List4TargetPositionXLeft        DATA   40, 127, 127
+
+List4TargetPositionYRight       DATA   84, 114, 114
+List4TargetPositionYLeft        DATA  157, 127, 127
+
+List4TargetOrientation          DATA    0,   0,   0
+List4TargetSpeed                DATA  127, 127, 127
+List4TargetFWingPosition        DATA    0,   0,  45
+List4TargetBWingPosition        DATA    0,   0,  90
+List4TargetWaypointRange        DATA   12,  60,   3
+LIST4_NUMBER_WAYPOINTS    CON     3
+
+
+'List4TargetPositionXRight       DATA   45,  45,   0,  50,   3,  11,  60, 223
+'List4TargetPositionXLeft        DATA   45,  45,   0,  50,   3,  11,  60, 223
+
+'List4TargetPositionYRight       DATA   75,  90,  61, 177, 179, 123, 117, 117
+'List4TargetPositionYLeft        DATA  166, 151, 180,  64,  62, 118, 124, 124
+
+'List4TargetOrientation          DATA    0,   0,   0,   0,   0,   0,   0,   0
+'List4TargetSpeed                DATA  127, 127, 127, 127, 127, 127, 127, 127
+'List4TargetFWingPosition        DATA    0,   0,   0,   0,   0,   0,   0,  45
+'List4TargetBWingPosition        DATA    0,   0,   0,   0,   0,   0,   0,  45
+'List4TargetWaypointRange        DATA   12,   5,   5,  12,  12,  12,  12,  12
+'LIST4_NUMBER_WAYPOINTS    CON     8
+
+
+
+
+'-----One Point: Single hit and then go back to the center of the ramp on the starting side of the ramp.
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4
+'List5TargetPositionXRight       DATA   40, 127, 127,  54
+'List5TargetPositionXLeft        DATA   40, 127, 127,  54
+
+'List5TargetPositionYRight       DATA   84, 114, 114, 123
+'List5TargetPositionYLeft        DATA  157, 127, 127, 118
+ 
+'List5TargetOrientation          DATA    0,   0,   0,   0
+'List5TargetSpeed                DATA  127, 127, 127, 127
+'List5TargetFWingPosition        DATA    0,   0,  45,  45
+'List5TargetBWingPosition        DATA    0,   0,  90,  90
+'List5TargetWaypointRange        DATA   12,  60,   3,   3
+'LIST5_NUMBER_WAYPOINTS    CON     4
+
+
+
+
+'-----Sweep for bins on our starting side of the field and go up and over the ramp stopping in our scoring zone
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5  Pt6  
+
+'List5TargetPositionXRight       DATA    0,  50,   3,  11,  60, 223
+'List5TargetPositionXLeft        DATA    0,  50,   3,  11,  60, 223
+
+'List5TargetPositionYRight       DATA   61, 177, 179, 123, 117, 117
+'List5TargetPositionYLeft        DATA  180,  64,  62, 118, 124, 124
+
+'List5TargetOrientation          DATA    0,   0,   0,   0,   0,   0
+'List5TargetSpeed                DATA   90, 127, 127, 127, 127, 127    'First tested with 80
+'List5TargetFWingPosition        DATA    0,   0,   0,   0,   0,  45
+'List5TargetBWingPosition        DATA    0,   0,   0,   0,   0,  45
+'List5TargetWaypointRange        DATA    5,  12,  12,  12,  12,  12
+'LIST5_NUMBER_WAYPOINTS    CON     6
+
+
+'-----Avoid attack under bar, sweep for bins on our starting side of the field and go up and over the ramp stopping in our scoring zone
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5  Pt6  
+
+List5TargetPositionXRight       DATA   40,  45,   0,  50,   3,  11,  60, 223
+List5TargetPositionXLeft        DATA   40,  45,   0,  50,   3,  11,  60, 223
+
+List5TargetPositionYRight       DATA   84,  81,  95, 177, 179, 123, 117, 117
+List5TargetPositionYLeft        DATA  157, 160, 146,  64,  62, 118, 124, 124
+
+List5TargetOrientation          DATA    0,   0,   0,   0,   0,   0,   0,   0
+List5TargetSpeed                DATA  127, 127, 127, 127, 127, 127, 127, 127
+List5TargetFWingPosition        DATA    0,   0,   0,   0,   0,   0,   0,  45
+List5TargetBWingPosition        DATA    0,   0,   0,   0,   0,   0,   0,  45
+List5TargetWaypointRange        DATA   12,   5,   5,  12,  12,  12,  12,  12
+LIST5_NUMBER_WAYPOINTS    CON     8
+
+
+
+
+
+'-----One Point: Single hit and come back to hit close opponent human player stack
+'                                     Pt0  Pt1  Pt2  Pt3  Pt4  Pt5  Pt6
+List6TargetPositionXRight       DATA   40, 127, 127,  66,  30,   0,  57
+List6TargetPositionXLeft        DATA   40, 127, 127,  66,  30,   0,  57
+
+List6TargetPositionYRight       DATA   84, 114, 114, 114,  70,  63, 122
+List6TargetPositionYLeft        DATA  157, 127, 127, 127, 171, 178, 119
+
+List6TargetOrientation          DATA    0,   0,   0,   0,   0,   0,   0
+List6TargetSpeed                DATA  127, 127, 127,  60, 127, 127, 127
+List6TargetFWingPosition        DATA    0,   0,  45,  45,  45,  45,  45
+List6TargetBWingPosition        DATA    0,   0,  90,  45,  45,  45,  45
+List6TargetWaypointRange        DATA   12,  66,   3,   5,   7,   3,   5   'Raul said to move the wings opening 12" sooner
+LIST6_NUMBER_WAYPOINTS    CON     7
+
+
+
+
+
+
+'----Simple "45 degree" test that was the first auto software tested
+'----  it moves from the duct tape square to the duct tape spots
+'                                     Pt0  Pt1  Pt2
+'RightList8TargetPositionX       DATA  151, 161, 169
+'RightList8TargetPositionY       DATA  151, 151, 127
+'RightList8TargetOrientation     DATA    0,   0,   0
+'RightList8TargetSpeed           DATA   20,  20,  20
+'RightList8TargetFWingPosition   DATA    0,   0,   0
+'RightList8TargetBWingPosition   DATA    0,   0,   0
+'RightList8TargetWaypointRange   DATA    2,   2,   2
+'RIGHT_LIST8_NUMBER_WAYPOINTS    CON     3
+
+
+
+
+
+'=============================================================================================================
+'========== ARCTAN LOOKUP TABLE ==============================================================================
+'=============================================================================================================
+
+
+
+'=============================================================================================================
+'========== DECLARE VARIABLES ================================================================================
+'=============================================================================================================
+'  Below is a list of declared input and output variables.  Comment or un-comment
+'  the variables as needed.  Declare any additional variables required in
+'  your main program loop.  Note that you may only use 26 total variables.
+
+'---------- Misc. MUST BE THE FIRST VARIABLES IN ALL BANKS ---------------------------------------------------
+'------PERSISTENT VARIABLES -- VALID IN ALL BANKS ------------------------------------------------------------
+'NOTE:In order for these variables to be valid in ALL banks, they must be in the exact same spot in each bank.
+'     To do this, just always keep these as the first variables in each bank.
+'packet_num	VAR byte
+'delta_t	VAR byte
+
+'---------- Aliases for the Pbasic Mode Byte (nvr_PB_mode) -------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Bit 7 of the nvr_PB_mode byte (aliased as comp_mode below) indicates the status
+'  of the Competition Control, either Enabled or Disabled.  This indicates the
+'  starting and stopping of rounds at the competitions.
+'  Comp_mode is indicated by a solid "Disabled" LED on the Operator Interface.
+'  Comp_mode = 1 for Enabled, 0 for Disabled.
+'
+'  Bit 6 of the nvr_PB_mode byte (aliased as auton_mode below) indicates the status
+'  of the Autonomous Mode, either Autonomous or Normal.  This indicates when
+'  the robot must run on its own programming.  When in Autonomous Mode, all
+'  OI analog inputs are set to 127 and all OI switch inputs are set to 0 (zero).
+'  Auton_mode is indicated by a blinking "Disabled" LED on the Operator Interface.
+'  Auton_mode = 1 for Autonomous, 0 for Normal.
+'
+'  Autonomous Mode can be turned ON by setting the RC to Team 0 (zero).
+
+'
+'  Bit 5 of the nvr_PB_mode byte (aliased as user_display_mode below) indicates when
+'  the user selects the "User Mode" on the OI.  nvr_PB_mode.bit5 is set to 1 in "User Mode".
+'  When the user selects channel, team number, or voltage, nvr_PB_mode.bit5 is set to 0
+'  When in "User Mode", the eight Robot Feedback LED are turned OFF.
+'  Note: "User Mode" is identified by the letter u in the left digit (for 4 digit OI's)
+'  Note: "User Mode" is identified by decimal places on the right two digits (for 3 digit OI's)
+nvr_PB_mode                    VAR byte
+nvr_PB_mode__comp_mode         VAR nvr_PB_mode.bit7
+nvr_PB_mode__auton_mode        VAR nvr_PB_mode.bit6
+nvr_PB_mode__user_display_mode VAR nvr_PB_mode.bit5
+
+
+nvr_manybits                   VAR byte
+nvr_manybits__twitchdone       VAR nvr_manybits.bit0
+nvr_manybits__crab_broken      VAR nvr_manybits.bit1
+nvr_manybits__first_loop       VAR nvr_manybits.bit2
+nvr_manybits__first_auto_loop  VAR nvr_manybits.bit3
+nvr_manybits__prev_loop_ctr    VAR nvr_manybits.bit4
+nvr_manybits__prev_loop_dir    VAR nvr_manybits.bit5
+nvr_manybits__fwing_brake      VAR nvr_manybits.bit6
+nvr_manybits__bwing_brake      VAR nvr_manybits.bit7
+
+nvr_2_3_waypoint_x             VAR byte
+nvr_2_3_waypoint_y             VAR byte
+nvr_2_3_waypoint_speed         VAR byte
+
+
+
+
+nvr_2_3_auton_bits             VAR byte
+nvr_2_3_auton_bits__auton_stop VAR nvr_2_3_auton_bits.bit0
+
+
+'---------- Operator Interface (OI) - Analog Inputs ----------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+
+
+'---------- Operator Interface - Digital Inputs --------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+oi_swA		VAR byte	'OI Digital Switch Inputs 1 thru 8
+oi_swB		VAR byte	'OI Digital Switch Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Inputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+rc_swA		VAR byte	'RC Digital Inputs 1 thru 8
+'rc_swB		VAR byte	'RC Digital Inputs 9 thru 16
+
+
+'---------- Robot Controller - Digital Outputs ---------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+relayA		VAR byte
+relayB		VAR byte
+
+'THIS MUST MATCH WITH robot2/3A/4 ALSO
+waypoint            VAR byte
+waypoint__side      VAR waypoint.BIT7     'Top bit indicates side of the field
+waypoint__prog_side VAR waypoint.HIGHNIB  'Program number combined with side is the program to run
+waypoint__idx       VAR waypoint.LOWNIB   'Bottom 4 bits are the current waypoint index we are at
+WAYPOINT_PROG_ONLY_MASK CON %0111   'ANDing prog_side with this will return prog only (mask off "side"...bit7)
+
+waypoint_range    VAR byte
+num_waypoints     VAR byte
+
+'---------- Temporary Variables ------------------------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+tmp1		VAR byte
+tmp2		VAR byte
+tmp3		VAR byte
+tmp4		VAR byte
+tmp5		VAR byte
+tmp6		VAR byte
+tmp7		VAR byte
+tmp8		VAR byte
+
+'Keep track of the the user_mode bit (RC request to see user data instead of LEDs) 
+tmp1_manybits2__force_auto     VAR tmp1.bit0    'User requested robot to run auto regardless of auton bit from OI 
+tmp1_manybits2__prev_user_mode VAR tmp1.bit1    'Previous loop value of the PBMode.user_mode
+tmp1_manybits2__many2          VAR tmp1.bit2
+tmp1_manybits2__many3          VAR tmp1.bit3
+tmp1_manybits2__loop_cnt       VAR tmp1.HIGHNIB 'Keep loop count...incrememnted each loop
+
+
+'=============================================================================================================
+'========== DEFINE ALIASES ===================================================================================
+'=============================================================================================================
+'  Aliases are variables which are sub-divisions of variables defined
+'  above.  Aliases don't require any additional RAM.
+
+
+'---------- Aliases for each OI switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Operator Interface.
+'  Ports 1 & 3 have their inputs duplicated in ports 4 & 2 respectively.  The 
+'  inputs from ports 1 & 3 may be disabled via the 'Disable' dip switch 
+'  located on the Operator Interface.  See Users Manual for details.
+
+fwing_up_sw	VAR oi_swA.bit0	'p1_sw_trig
+fwing_dn_sw	VAR oi_swA.bit1	'p1_sw_top
+bwing_up_sw	VAR oi_swA.bit2	'p1_sw_aux1
+bwing_dn_sw	VAR oi_swA.bit3	'p1_sw_aux2
+
+stacker_up_sw	VAR oi_swA.bit4	'p3_sw_trig
+stacker_dn_sw	VAR oi_swA.bit5	'p3_sw_top
+scraper_sw	VAR oi_swA.bit6	'p3_sw_aux1
+crab_ovr_sw	VAR oi_swA.bit7	'p3_sw_aux2
+
+p2_sw_trig	VAR oi_swB.bit0	'p2_sw_trig
+p2_sw_top	VAR oi_swB.bit1	'p2_sw_top
+p2_sw_aux1	VAR oi_swB.bit2	'p2_sw_aux1
+p2_sw_aux2	VAR oi_swB.bit3	'p2_sw_aux2
+
+crab_trig	VAR oi_swB.bit4	'p4_sw_trig
+crab_top	VAR oi_swB.bit5	'p4_sw_top
+drive_trig	VAR oi_swB.bit6	'p4_sw_aux1
+drive_top	VAR oi_swB.bit7	'p4_sw_aux2
+
+
+'---------- Aliases for each RC switch input -----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the digital inputs located on the Robot Controller.
+
+rc_sw1		VAR rc_swA.bit0
+rc_sw2		VAR rc_swA.bit1
+rc_sw3		VAR rc_swA.bit2
+rc_sw4		VAR rc_swA.bit3
+rc_sw5		VAR rc_swA.bit4
+rc_sw6		VAR rc_swA.bit5
+rc_sw7		VAR rc_swA.bit6
+rc_sw8		VAR rc_swA.bit7
+
+'---------- Aliases for each RC Relay outputs ----------------------------------------------------------------
+'-------------------------------------------------------------------------------------------------------------
+'  Below are aliases for the relay outputs located on the Robot Controller.
+
+relay1_fwd	VAR relayA.bit0
+relay1_rev	VAR relayA.bit1
+relay2_fwd	VAR relayA.bit2
+relay2_rev	VAR relayA.bit3
+relay3_fwd	VAR relayA.bit4
+relay3_rev	VAR relayA.bit5
+relay4_fwd	VAR relayA.bit6
+relay4_rev	VAR relayA.bit7
+
+relay5_fwd	VAR relayB.bit0
+relay5_rev	VAR relayB.bit1
+relay6_fwd	VAR relayB.bit2
+relay6_rev	VAR relayB.bit3
+relay7_fwd	VAR relayB.bit4
+relay7_rev	VAR relayB.bit5
+relay8_fwd	VAR relayB.bit6
+relay8_rev	VAR relayB.bit7
+
+'=============================================================================
+'SHARED Constants (these are used by more than one bank and MUST AGREE in each) 
+TRUE		CON 1
+FALSE		CON 0
+
+'=============================================================================
+'Constants for Scratchpad ram locations [0-62] (63 reserved)
+'(these constants are shared and must agree in all banks) 
+
+'(I just reserved these in the order they come in the serin stream)
+
+s_oi_swA	CON	0
+s_oi_swB	CON	1
+s_rc_swA	CON	2
+s_drive_x       CON     3
+s_drive_y       CON     4
+s_crab_x        CON     5
+s_crab_y        CON     6
+s_fwing_oi      CON     7
+s_bwing_oi      CON     8
+s_stacker_oi    CON     9
+s_manybits2	CON	10  'additional status bits
+'s_packet_num 	CON	11
+s_lcrab_pot	CON	12	'left crab pot
+s_rcrab_pot	CON	13	'right crab pot
+
+s_fwing_pot	CON	15	'front wing pot
+s_bwing_pot	CON	16	'back wing pot
+
+'s_p3_y		CON	17
+s_stacker_pot	CON	18	'stacker pot
+'s_sensor6	CON	19
+'s_p2_wheel	CON	20
+'s_p1_wheel	CON	21
+'s_sensor7	CON	22
+'(...end of possible serin inputs.  continue now, with outputs and stored user variables.) 
+
+s_stacker_tgt   CON     25
+'s_waypoint_sel  CON     26
+'s_waypoint_flgs CON     27   'flags associated with waypoint
+
+s_curr_pos_x	CON	32
+s_curr_pos_y	CON	33
+s_curr_orient	CON	34   'current compass value (or theta) of the robot
+s_target_orient CON     35   'target compass value of the robot
+
+s_fwing_wp_tgt  CON     36
+s_bwing_wp_tgt  CON     37
+
+s_waypoint  	CON	38
+s_target_heading CON	39
+
+s_relayA	CON	40
+s_relayB	CON	41
+
+s_fwing_tgt	CON	42
+s_bwing_tgt	CON	43
+
+s_rcrab_target	CON	44
+s_lcrab_target	CON	45
+s_right_crab	CON	46  'crab steering motor speed
+s_left_crab	CON	47
+s_rcrab_init	CON	48
+s_lcrab_init	CON	49
+
+s_lf_cur	CON	50  'current speed of drive wheels
+s_rf_cur	CON	51
+s_lb_cur	CON	52
+s_rb_cur	CON	53
+
+s_lf_wheel	CON	54  'stored value for left_wheel 
+s_rf_wheel	CON	55
+s_lb_wheel	CON	56
+s_rb_wheel	CON	57
+
+s_front_wing	CON	58  'current speed of wings
+s_back_wing	CON	59
+s_stacker       CON     60  'current speed of stacker
+
+s_bat_volt	CON	62
+s_banknumber	CON	63  'Read-Only
+
+' ...insert any other storage names up to 62 that are useful... 
+
+
+
+'      ____ ___  _   _ ____ _____  _    _   _ _____ ____
+'     / ___/ _ \| \ | / ___|_   _|/ \  | \ | |_   _/ ___|
+'    | |  | | | |  \| \___ \ | | / _ \ |  \| | | | \___ \
+'    | |__| |_| | |\  |___) || |/ ___ \| |\  | | |  ___) |
+'     \____\___/|_| \_|____/ |_/_/   \_\_| \_| |_| |____/
+'
+'Bank Constants (only used in this bank)
+ANALOG_TO_BUTTON_HIGH	CON	200 'threshold for analog buttons
+DRIVE_DEADZONE		CON	5
+DRIVE_ACCEL_RATE	CON	13
+DRIVE_SCL		CON	50  'turbo drive speed reduction (percent) [e.g. 50]
+DRIVE_CON		CON	64  '128 * (1- reduction percent) [e.g. 64] 
+
+TWO_AXIS_DEADZONE	CON	50
+
+CRAB_MODE_DEADZONE	CON	20
+
+CRAB_MANU_SPEED		CON	50
+CRAB_FAST		CON	126 'must be < 127
+CRAB_MED		CON	80
+CRAB_SLOW		CON	17
+
+CRAB_POSITION_NEAR	CON	2
+CRAB_POSITION_CLOSE	CON	15
+CRAB_POSITION_FAR	CON	40
+
+CRAB_RIGHT90		CON	18
+CRAB_LEFT90		CON	213
+
+AUTO_DRIVE_FWD          CON     0
+AUTO_DRIVE_REV          CON     1
+
+CC_OUTBAUD		CON	240
+CC_INBAUD		CON	240
+
+#IF COMPETITION_ROBOT #THEN
+'=================CHANGE THESE IN BANK3 ALSO!!!!!!!!!!!!!!!!!!!!!
+'=================Competition ROBOT
+POT_RCRAB_RIGHT_180        CON  9       'Right Pot reading for 0 brads (180 degrees to the right)
+POT_RCRAB_LEFT_180         CON  244     'Right Pot reading for 255 brads (180 degrees to the left)
+'=================END CHANGE BANK3 WARNING!!!!!!!!!!!!!!!!!!!!!!!
+#ELSE
+'=================CHANGE THESE IN BANK3 ALSO!!!!!!!!!!!!!!!!!!!!!
+'=================Proto ROBOT===============
+POT_RCRAB_RIGHT_180        CON  12      'Right Pot reading for 0 brads (180 degrees to the right)
+POT_RCRAB_LEFT_180         CON  243     'Right Pot reading for 255 brads (180 degrees to the left)
+'=================END CHANGE BANK3 WARNING!!!!!!!!!!!!!!!!!!!!!!!
+#ENDIF
+
+CC_CMD_REQ_POSITION  CON 180  'Command byte sent to CC to request X,Y,theta
+CC_CMD_REQ_X_POS     CON 85   'Command byte sent to CC to request just X postion
+CC_CMD_REQ_Y_POS     CON 170  'Command byte sent to CC to request just Y postion
+CC_CMD_REQ_THETA     CON 240  'Command byte sent to CC to request just theta postion
+CC_CMD_SET_POSITION  CON 120  'Command byte sent to CC to set X,Y,theta on the CC if it reset
+CC_CMD_SET_WAYPOINT  CON 130  'Command byte sent to CC to set our current waypoint
+CC_CMD_REQ_WAYPOINT  CON 140  'Command byte sent to CC to get our current waypoint
+CC_CMD_REQ_PROG_SIDE CON 200  'Command byte sent to CC to get our program number and side
+
+'---- Starting points for robot
+'WARNING...MUST CHANGE THIS DEFINE IN robot2/3/4 ALSO
+WAYPOINT_RIGHT_SIDE     CON  0     'must be a bit, changing this effects AUTO_LIST_XXX_ADD below
+WAYPOINT_LEFT_SIDE      CON  1
+
+'Remember, left side sets the highest bit of list num (ends up adding 32 to list)
+'THESE MUST MATCH WITH robot2 ALSO
+AUTO_LIST0              CON     0   '0 for right, 8 for left side
+AUTO_LIST1              CON     1   '1 for right, 9 for left side
+AUTO_LIST2              CON     2   '2 for right, 10 for left side
+AUTO_LIST3              CON     3   '3 for right, 11 for left side
+AUTO_LIST4              CON     4   '4 for right, 12 for left side
+AUTO_LIST5              CON     5   '5 for right, 13 for left side
+AUTO_LIST6              CON     6   '6 for right, 14 for left side
+'AUTO_LIST7              CON     7   '7 for right, 15 for left side
+'AUTO_LIST8              CON     8   '8 for right, 16 for left side
+'AUTO_LIST9              CON     9   '9 for right, 17 for left side
+'AUTO_LIST10             CON     10  '10 for right,18 for left side
+AUTO_LIST_INVALID       CON     7   '7 and 15 equate to invalid list number
+
+AUTO_LIST_RIGHT_ADD     CON  0   'Setting right side bit to highest bit in nibble adds 0 to the list number
+AUTO_LIST_LEFT_ADD      CON  8   'Setting left side bit to highest bit in nibble adds 7 to the list number
+
+AUTO_LIST0_RIGHT        CON AUTO_LIST0  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST0_LEFT         CON AUTO_LIST0  + AUTO_LIST_LEFT_ADD
+AUTO_LIST1_RIGHT        CON AUTO_LIST1  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST1_LEFT         CON AUTO_LIST1  + AUTO_LIST_LEFT_ADD
+AUTO_LIST2_RIGHT        CON AUTO_LIST2  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST2_LEFT         CON AUTO_LIST2  + AUTO_LIST_LEFT_ADD
+AUTO_LIST3_RIGHT        CON AUTO_LIST3  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST3_LEFT         CON AUTO_LIST3  + AUTO_LIST_LEFT_ADD
+AUTO_LIST4_RIGHT        CON AUTO_LIST4  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST4_LEFT         CON AUTO_LIST4  + AUTO_LIST_LEFT_ADD
+AUTO_LIST5_RIGHT        CON AUTO_LIST5  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST5_LEFT         CON AUTO_LIST5  + AUTO_LIST_LEFT_ADD
+AUTO_LIST6_RIGHT        CON AUTO_LIST6  + AUTO_LIST_RIGHT_ADD
+AUTO_LIST6_LEFT         CON AUTO_LIST6  + AUTO_LIST_LEFT_ADD
+'AUTO_LIST7_RIGHT        CON AUTO_LIST7  + AUTO_LIST_RIGHT_ADD
+'AUTO_LIST7_LEFT         CON AUTO_LIST7  + AUTO_LIST_LEFT_ADD
+'AUTO_LIST8_RIGHT        CON AUTO_LIST8  + AUTO_LIST_RIGHT_ADD
+'AUTO_LIST8_LEFT         CON AUTO_LIST8  + AUTO_LIST_LEFT_ADD
+'AUTO_LIST9_RIGHT        CON AUTO_LIST9  + AUTO_LIST_RIGHT_ADD
+'AUTO_LIST9_LEFT         CON AUTO_LIST9  + AUTO_LIST_LEFT_ADD
+'AUTO_LIST10_RIGHT       CON AUTO_LIST10 + AUTO_LIST_RIGHT_ADD
+'AUTO_LIST10_LEFT        CON AUTO_LIST10 + AUTO_LIST_LEFT_ADD
+'AUTO_LIST11_RIGHT       CON AUTO_LIST11 + AUTO_LIST_RIGHT_ADD
+'AUTO_LIST11_LEFT        CON AUTO_LIST11 + AUTO_LIST_LEFT_ADD
+
+'=================CHANGE THESE IN BANK3 ALSO!!!!!!!!!!!!!!!!!!!!!
+'Waypoint option flags
+AUTO_FLAGS_DRIVE_FWD      CON   $80  'Force the robot to drive forward to get to this waypoint
+AUTO_FLAGS_DRIVE_REV      CON   $40  'Force the robot to drive in reverse to get to this waypoint
+AUTO_FLAGS_HOLD_POSITION  CON   $20  'Robot will move on to another waypoint and will instead hold this position
+'=================END CHANGE BANK3 WARNING!!!!!!!!!!!!!!!!!!!!!!!
+
+BRADS_TO_OPTIMIZE_CRAB CON 96  'If our crab target is farther away than this many brads then we will actually pick the
+                               ' opposite 180 degree target and drive backwards.  This should not be lower than
+                               ' 63 brads (90 degrees) but can be larger so we can take advantage of momentum so that
+                               ' if we are half way between the two target (63 brads from target) we continue to the
+                               ' same target, but if we are 96 (130 degrees) from target use the opposite target
+
+'WARNING, THIS MUST MATCH UP WITH THE DEFINE IN robot2...CHANGE IN robot2 also
+DEFAULT_WAYPOINT_IDX            CON     $F  'Default waypoint index...indicates RC doesn't know the waypoint
+                                            ' and needs to ask the CC sice this means the RC has reset.
+                                            'On powerup CC defaults waypoint index to 0 so when the robot is
+                                            ' first turned on the RC will request the index from the CC.  This
+                                            ' will allow the RC to reset in the middle of auton and the CC will
+                                            ' tell it what waypoint it was tracking to.
+
+'=============================================================================================================
+'========== MAIN CODE ========================================================================================
+'=============================================================================================================
+
+'GET s_PB_mode, PB_mode  'PB_mode is now a persistent ram variable across banks.
+
+
+'===== need to abort if pots are broken
+
+'Always read from the Custom Circuit to get our current orientation/theta
+nvr_2_3_auton_bits__auton_stop = 0
+Gosub InputData
+
+'If we are in auto mode and we are enabled then just output the waypoint
+if(nvr_PB_mode__auton_mode = 1) then
+   'do Autonomous stuff
+
+   if (nvr_2_3_auton_bits__auton_stop = 0) then
+      Gosub WaypointManager
+   endif
+
+   'continue autonomous code
+   Run 3
+endif
+
+'debug "3Done"
+
+Run 4
+
+
+
+'==========================================
+'========= InputData Subroutine ===========
+'== Inputs:  none
+'== Outputs: s_curr_pos_x - current X position
+'==          s_curr_pos_y - current y position
+'==          s_curr_orient - current orientation
+'== Modifys: tmp1, tmp2, tmp3
+'== Purpose: get current position data from CC
+'==========================================
+InputData:
+
+'Serout 16, CC_OUTBAUD, [CC_CMD_REQ_POSITION]
+'Serin 16, CC_INBAUD, 10, InputDataNoData, [tmp1, tmp2, tmp3]
+'request X
+Serout 16, CC_OUTBAUD, [CC_CMD_REQ_X_POS]
+Serin 16, CC_INBAUD, 5, InputDataNoData, [tmp1]
+'request Y
+Serout 16, CC_OUTBAUD, [CC_CMD_REQ_Y_POS]
+Serin 16, CC_INBAUD, 5, InputDataNoData, [tmp2]
+'request theta
+Serout 16, CC_OUTBAUD, [CC_CMD_REQ_THETA]
+Serin 16, CC_INBAUD, 5, InputDataNoData, [tmp3]
+
+GET s_waypoint, waypoint
+if(waypoint__idx = DEFAULT_WAYPOINT_IDX) then
+   'The RC has just reset, we must ask the CC for what waypoint we were at before the reset.
+   '  On powerup the CC will default the index to 0, so powerup will work fine.
+   Serout 16, CC_OUTBAUD, [CC_CMD_REQ_WAYPOINT]
+   Serin 16, CC_INBAUD, 5, WaypointManagerDone, [tmp3]
+   waypoint__idx = tmp3
+endif
+  
+'If we reset in the middle of auton mode, then we won't be able to figure out the autonomous
+'  program number so it will be INVALID.  In this case, ask the CC for that info
+if((waypoint__prog_side & WAYPOINT_PROG_ONLY_MASK) = AUTO_LIST_INVALID) then
+   Serout 16, CC_OUTBAUD, [CC_CMD_REQ_PROG_SIDE]
+   Serin 16, CC_INBAUD, 5, WaypointManagerDone, [tmp3]
+   waypoint__prog_side = tmp3
+endif
+
+PUT s_waypoint, waypoint
+
+'debug "x ", DEC tmp1, " y ", DEC tmp2, " t ", DEC tmp3, CR
+
+'X,Y,Theta of Zero means the CC has reset and doesn't know where it is.  We will
+'  feed it with the last known data (or in a powerup case, the data for the our start
+'  position on the field.
+if ((tmp1 = 0) AND (tmp2 = 0) AND (tmp3 = 0)) then
+   GET s_curr_pos_x, tmp1
+   GET s_curr_pos_y, tmp2
+   GET s_curr_orient, tmp3
+   Serout 16, CC_OUTBAUD, [CC_CMD_SET_POSITION, tmp1, tmp2, tmp3]
+   
+else
+   PUT s_curr_pos_x, tmp1
+   PUT s_curr_pos_y, tmp2
+   PUT s_curr_orient, tmp3
+endif
+
+goto InputDataEnd
+
+InputDataNoData:
+'NO CUSTOM CIRCUIT!!!
+'Toggle 7
+'debug "Serin timeout", CR
+nvr_2_3_auton_bits__auton_stop = 1
+GET s_target_orient, tmp1  'No custom circuit so set the curr theta to target to prevent theta correction
+PUT s_curr_orient, tmp1
+
+InputDataEnd:
+
+return 'from InputData
+
+
+
+'================================================
+'========= WaypointManager Subroutine ===========
+'== Inputs:  
+'== Outputs: 
+'== Modifys: 
+'== Purpose: 
+'================================================
+WaypointManager:
+
+
+'----- change above in ReadWaypoint also -----
+GET s_waypoint, waypoint
+
+select (waypoint__prog_side & WAYPOINT_PROG_ONLY_MASK)
+   case (AUTO_LIST0)
+      num_waypoints = LIST0_NUMBER_WAYPOINTS
+   case (AUTO_LIST1)
+      num_waypoints = LIST1_NUMBER_WAYPOINTS
+   case (AUTO_LIST2)
+      num_waypoints = LIST2_NUMBER_WAYPOINTS
+   case (AUTO_LIST3)
+      num_waypoints = LIST3_NUMBER_WAYPOINTS
+   case (AUTO_LIST4)
+      num_waypoints = LIST4_NUMBER_WAYPOINTS
+   case (AUTO_LIST5)
+      num_waypoints = LIST5_NUMBER_WAYPOINTS
+   case (AUTO_LIST6)
+      num_waypoints = LIST6_NUMBER_WAYPOINTS
+   case else
+      num_waypoints = 0
+endselect
+
+if num_waypoints = 0 then WaypointManagerFinished
+
+if (waypoint__idx = num_waypoints) then WaypointManagerFinished
+
+if (nvr_manybits__crab_broken = 1) then WaypointManagerFinished
+
+Gosub ReadWaypoint
+
+'Once we reach a waypoint with the HOLD_POSITION flag set, don't try to move on...just stay
+'  at this waypoint until auto finishes.
+
+'GET s_waypoint_flgs, tmp1
+'if((tmp1&AUTO_FLAGS_HOLD_POSITION) = AUTO_FLAGS_HOLD_POSITION) then WaypointManagerDone
+ 
+
+'If the new waypoint is 0,0 then we are finished
+if (nvr_2_3_waypoint_x = 0 and nvr_2_3_waypoint_y = 0) then WaypointManagerFinished
+
+'if nvr_manybits__first_auto_loop = 1 then
+'   goto WaypointManagerDone
+'endif
+
+
+GET s_curr_pos_x, tmp3
+GET s_curr_pos_y, tmp4
+
+'compare current position to waypoint
+if (nvr_2_3_waypoint_x > tmp3) then
+   if (nvr_2_3_waypoint_y > tmp4) then
+      if ((nvr_2_3_waypoint_x - tmp3) <= waypoint_range) and ((nvr_2_3_waypoint_y - tmp4) <= waypoint_range) then
+         goto WaypointNextWaypoint
+      endif
+   else
+      if ((nvr_2_3_waypoint_x - tmp3) <= waypoint_range) and ((tmp4 - nvr_2_3_waypoint_y) <= waypoint_range) then
+         goto WaypointNextWaypoint
+      endif
+   endif
+else
+   if (nvr_2_3_waypoint_y > tmp4) then
+      if ((tmp3 - nvr_2_3_waypoint_x) <= waypoint_range) and ((nvr_2_3_waypoint_y - tmp4) <= waypoint_range) then
+         goto WaypointNextWaypoint
+      endif
+   else
+      if ((tmp3 - nvr_2_3_waypoint_x) <= waypoint_range) and ((tmp4 - nvr_2_3_waypoint_y) <= waypoint_range) then
+         goto WaypointNextWaypoint
+      endif
+   endif
+endif
+goto WaypointManagerDone
+
+
+WaypointNextWaypoint:
+
+'debug "o - WP x: ", DEC nvr_2_3_waypoint_x, " y: ", DEC nvr_2_3_waypoint_y, CR
+'debug "c - WP x: ", DEC tmp3, " y: ", DEC tmp4, CR
+waypoint__idx = waypoint__idx + 1
+
+PUT s_waypoint, waypoint
+'Save the waypoint off to the CC so the CC can tell us our waypoint if we reset
+Serout 16, CC_OUTBAUD, [CC_CMD_SET_WAYPOINT, waypoint__idx]
+
+if (waypoint__idx = num_waypoints) then
+   goto WaypointManagerFinished
+else
+   Gosub ReadWaypoint
+   goto WaypointManagerDone
+endif
+
+
+WaypointManagerFinished:
+GET s_fwing_wp_tgt, tmp1
+PUT s_fwing_tgt, tmp1
+GET s_bwing_wp_tgt, tmp1
+PUT s_bwing_tgt, tmp1
+nvr_2_3_auton_bits__auton_stop = 1
+
+WaypointManagerDone:
+'Gosub ReadWaypoint
+
+PUT s_waypoint, waypoint
+
+return 'from WaypointManager
+
+
+
+'=============================================
+'========= ReadWaypoint Subroutine ===========
+'== Inputs:  
+'== Outputs: 
+'== Modifys: 
+'== Purpose: 
+'=============================================
+ReadWaypoint:
+
+'----- change above in WaypointManager also -----
+GET s_waypoint, waypoint
+
+   select (waypoint__prog_side & WAYPOINT_PROG_ONLY_MASK)
+      case (AUTO_LIST0)
+         'read waypoint 0
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List0TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List0TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List0TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List0TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List0TargetOrientation + waypoint__idx), tmp4
+         READ (List0TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List0TargetFWingPosition + waypoint__idx), tmp5
+         READ (List0TargetBWingPosition + waypoint__idx), tmp6
+         READ (List0TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List0TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST1)
+         'read waypoint 1
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List1TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List1TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List1TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List1TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List1TargetOrientation + waypoint__idx), tmp4
+         READ (List1TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List1TargetFWingPosition + waypoint__idx), tmp5
+         READ (List1TargetBWingPosition + waypoint__idx), tmp6
+         READ (List1TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List1TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST2)
+         'read waypoint 2
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List2TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List2TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+         READ (List2TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+         READ (List2TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List2TargetOrientation + waypoint__idx), tmp4
+         READ (List2TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List2TargetFWingPosition + waypoint__idx), tmp5
+         READ (List2TargetBWingPosition + waypoint__idx), tmp6
+         READ (List2TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List2TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST3)
+         'read waypoint 3
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List3TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List3TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List3TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List3TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List3TargetOrientation + waypoint__idx), tmp4
+         READ (List3TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List3TargetFWingPosition + waypoint__idx), tmp5
+         READ (List3TargetBWingPosition + waypoint__idx), tmp6
+         READ (List3TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List3TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST4)
+         'read waypoint 4
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List4TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List4TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List4TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List4TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List4TargetOrientation + waypoint__idx), tmp4
+         READ (List4TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List4TargetFWingPosition + waypoint__idx), tmp5
+         READ (List4TargetBWingPosition + waypoint__idx), tmp6
+         READ (List4TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List4TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST5)
+         'read waypoint 5
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List5TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List5TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List5TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List5TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List5TargetOrientation + waypoint__idx), tmp4
+         READ (List5TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List5TargetFWingPosition + waypoint__idx), tmp5
+         READ (List5TargetBWingPosition + waypoint__idx), tmp6
+         READ (List5TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List5TargetWaypointFlags + waypoint__idx), tmp8
+      case (AUTO_LIST6)
+         'read waypoint 6
+         if(waypoint__side = WAYPOINT_RIGHT_SIDE) then
+            READ (List6TargetPositionXRight + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List6TargetPositionYRight + waypoint__idx), nvr_2_3_waypoint_y
+         else
+            READ (List6TargetPositionXLeft + waypoint__idx), nvr_2_3_waypoint_x
+            READ (List6TargetPositionYLeft + waypoint__idx), nvr_2_3_waypoint_y
+         endif
+         READ (List6TargetOrientation + waypoint__idx), tmp4
+         READ (List6TargetSpeed + waypoint__idx), nvr_2_3_waypoint_speed
+         READ (List6TargetFWingPosition + waypoint__idx), tmp5
+         READ (List6TargetBWingPosition + waypoint__idx), tmp6
+         READ (List6TargetWaypointRange + waypoint__idx), waypoint_range
+'         READ (List6TargetWaypointFlags + waypoint__idx), tmp8
+
+   endselect
+
+'debug "WP x: ", DEC nvr_2_3_waypoint_x, " y: ", DEC nvr_2_3_waypoint_y, CR
+
+'store waypoint info
+PUT s_target_orient, tmp4
+PUT s_fwing_tgt, tmp5
+PUT s_fwing_wp_tgt, tmp5
+PUT s_bwing_tgt, tmp6
+PUT s_bwing_wp_tgt, tmp6
+PUT s_stacker_tgt, tmp7
+'PUT s_waypoint_flgs, tmp8
+
+return 'from ReadWaypoint
+
+
+
